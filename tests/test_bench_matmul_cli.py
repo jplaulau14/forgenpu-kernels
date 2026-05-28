@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
+
 from forgenpu_kernels.reporting import format_benchmark_table
 
 
@@ -39,3 +42,52 @@ def test_format_table_includes_key_benchmark_columns() -> None:
     assert "cuda_tiled" in table
     assert "1.538" in table
     assert "0.504" in table
+
+
+def test_typer_cli_help_is_direct_command() -> None:
+    command = shutil.which("forgenpu-bench-matmul") or "forgenpu-bench-matmul"
+
+    completed = subprocess.run(
+        [command, "--help"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Usage: forgenpu-bench-matmul [OPTIONS]" in completed.stdout
+    assert "COMMAND [ARGS]" not in completed.stdout
+    assert "--implementation" in completed.stdout
+    assert "--format" in completed.stdout
+
+
+def test_typer_cli_table_smoke() -> None:
+    command = shutil.which("forgenpu-bench-matmul") or "forgenpu-bench-matmul"
+
+    completed = subprocess.run(
+        [
+            command,
+            "--implementation",
+            "torch",
+            "--device",
+            "cpu",
+            "--shape",
+            "8",
+            "8",
+            "8",
+            "--warmup",
+            "0",
+            "--iterations",
+            "1",
+            "--format",
+            "table",
+            "--quiet",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Matmul benchmark" in completed.stdout
+    assert "implementation" in completed.stdout
+    assert "torch" in completed.stdout
+    assert completed.stderr == ""

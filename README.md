@@ -65,7 +65,66 @@ uv sync --extra dev
 
 PyTorch is a project dependency. On a CUDA Linux machine, verify that the resolved PyTorch build matches the target CUDA runtime before trusting GPU benchmark results.
 
-## First Commands
+## Quick Start
+
+Run the local CPU validation path:
+
+```bash
+uv sync --extra dev
+make quickstart
+```
+
+Inspect the benchmark CLI:
+
+```bash
+uv run forgenpu-bench-matmul --help
+```
+
+Run a readable CPU smoke benchmark:
+
+```bash
+uv run forgenpu-bench-matmul \
+  --implementation torch \
+  --device auto \
+  --shape 512 512 512 \
+  --warmup 5 \
+  --iterations 20 \
+  --format table
+```
+
+Run the M2 GPU comparison on a CUDA machine:
+
+```bash
+uv run forgenpu-bench-matmul \
+  --implementation all \
+  --device cuda \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
+Save a JSON result for scripts or later analysis:
+
+```bash
+uv run forgenpu-bench-matmul \
+  --implementation all \
+  --device cuda \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format json \
+  --quiet \
+  --output results/matmul_1024_runpod.json
+```
+
+The historical script path still works:
+
+```bash
+uv run python benchmarks/bench_matmul.py --help
+```
+
+## Development Commands
 
 Check the environment:
 
@@ -82,13 +141,13 @@ uv run --extra dev pytest
 Run the PyTorch matmul benchmark:
 
 ```bash
-uv run python benchmarks/bench_matmul.py --shape 512 512 512 --warmup 5 --iterations 20
+uv run forgenpu-bench-matmul --shape 512 512 512 --warmup 5 --iterations 20
 ```
 
 Run PyTorch, naive CUDA, and tiled CUDA matmul on a CUDA machine:
 
 ```bash
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --implementation all \
   --device cuda \
   --shape 512 512 512 \
@@ -99,7 +158,7 @@ uv run python benchmarks/bench_matmul.py \
 Use the table format for interactive runs:
 
 ```bash
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --implementation all \
   --device cuda \
   --shape 1024 1024 1024 \
@@ -118,9 +177,14 @@ cmake --build build
 The same commands are available through `make`:
 
 ```bash
+make help
+make quickstart
 make env
+make lint
 make test
 make bench-matmul
+make bench-matmul-table
+make bench-matmul-gpu
 make profile-matmul
 make build-cpp
 ```

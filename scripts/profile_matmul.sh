@@ -17,12 +17,14 @@ benchmark_output="${OUT_DIR}/matmul_m2_${shape_label}_benchmark.json"
 
 export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-9.0}"
 
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --implementation all \
   --device cuda \
   --shape "${M}" "${N}" "${K}" \
   --warmup "${WARMUP}" \
   --iterations "${ITERATIONS}" \
+  --format json \
+  --quiet \
   --output "${benchmark_output}"
 
 if command -v ncu >/dev/null 2>&1; then
@@ -35,12 +37,13 @@ if command -v ncu >/dev/null 2>&1; then
     --section Occupancy \
     --force-overwrite \
     --export "${OUT_DIR}/matmul_tiled_${shape_label}_ncu" \
-    uv run python benchmarks/bench_matmul.py \
+    uv run forgenpu-bench-matmul \
       --implementation cuda_tiled \
       --device cuda \
       --shape "${M}" "${N}" "${K}" \
       --warmup "${PROFILE_WARMUP}" \
-      --iterations "${PROFILE_ITERATIONS}"
+      --iterations "${PROFILE_ITERATIONS}" \
+      --quiet
   )
 
   if command -v timeout >/dev/null 2>&1; then
@@ -68,12 +71,13 @@ elif command -v nsys >/dev/null 2>&1; then
   nsys profile \
     --force-overwrite true \
     --output "${OUT_DIR}/matmul_tiled_${shape_label}_nsys" \
-    uv run python benchmarks/bench_matmul.py \
+    uv run forgenpu-bench-matmul \
       --implementation cuda_tiled \
       --device cuda \
       --shape "${M}" "${N}" "${K}" \
       --warmup "${PROFILE_WARMUP}" \
-      --iterations "${PROFILE_ITERATIONS}"
+      --iterations "${PROFILE_ITERATIONS}" \
+      --quiet
   echo "Nsight Systems report: ${OUT_DIR}/matmul_tiled_${shape_label}_nsys.nsys-rep"
 else
   fallback_output="${OUT_DIR}/matmul_tiled_${shape_label}_profile_fallback.txt"

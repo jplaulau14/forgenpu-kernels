@@ -107,25 +107,25 @@ Do not describe either custom CUDA implementation as production optimized.
 PyTorch baseline:
 
 ```bash
-uv run python benchmarks/bench_matmul.py --implementation torch
+uv run forgenpu-bench-matmul --implementation torch
 ```
 
 Naive CUDA:
 
 ```bash
-uv run python benchmarks/bench_matmul.py --implementation cuda_naive --device cuda
+uv run forgenpu-bench-matmul --implementation cuda_naive --device cuda
 ```
 
 Tiled CUDA:
 
 ```bash
-uv run python benchmarks/bench_matmul.py --implementation cuda_tiled --device cuda
+uv run forgenpu-bench-matmul --implementation cuda_tiled --device cuda
 ```
 
 All implementations:
 
 ```bash
-uv run python benchmarks/bench_matmul.py --implementation all --device cuda
+uv run forgenpu-bench-matmul --implementation all --device cuda
 ```
 
 Profiler capture:

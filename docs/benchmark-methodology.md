@@ -11,6 +11,8 @@ Current behavior:
 - use `torch.cuda.Event` on CUDA,
 - use `time.perf_counter_ns` on CPU,
 - report p50, p95, mean latency, correctness error, shape, dtype, and machine metadata.
+- expose a Typer CLI at `uv run forgenpu-bench-matmul`,
+- render interactive tables with Rich,
 - write progress logs to stderr so long CUDA extension builds and benchmark runs do not look stalled.
 
 M2 implementations:
@@ -59,7 +61,7 @@ The memory estimates are explanatory, not hardware-counter measurements. Use pro
 PyTorch baseline:
 
 ```bash
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --implementation torch \
   --shape 512 512 512 \
   --warmup 5 \
@@ -69,7 +71,7 @@ uv run python benchmarks/bench_matmul.py \
 CUDA naive on a GPU machine:
 
 ```bash
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --implementation cuda_naive \
   --device cuda \
   --shape 512 512 512 \
@@ -80,7 +82,7 @@ uv run python benchmarks/bench_matmul.py \
 CUDA tiled on a GPU machine:
 
 ```bash
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --implementation cuda_tiled \
   --device cuda \
   --shape 512 512 512 \
@@ -91,7 +93,7 @@ uv run python benchmarks/bench_matmul.py \
 All implementations:
 
 ```bash
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --implementation all \
   --device cuda \
   --shape 512 512 512 \
@@ -102,7 +104,7 @@ uv run python benchmarks/bench_matmul.py \
 Interactive table output:
 
 ```bash
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --implementation all \
   --device cuda \
   --shape 1024 1024 1024 \

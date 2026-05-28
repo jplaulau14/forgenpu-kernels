@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import json
+from io import StringIO
 from pathlib import Path
 from typing import Any
+
+from rich import box
+from rich.console import Console
+from rich.table import Table
 
 
 def format_float(value: object, *, digits: int = 3) -> str:
@@ -21,25 +26,27 @@ def format_bytes_as_gib(value: object) -> str:
     return f"{int(value) / (1024**3):.3f}"
 
 
-def format_table_row(cells: list[str], widths: list[int]) -> str:
-    return "  ".join(cell.ljust(width) for cell, width in zip(cells, widths, strict=True))
+def build_benchmark_table(rows: list[dict[str, Any]]) -> Table:
+    table = Table(
+        title="Matmul benchmark",
+        box=box.ASCII,
+        show_lines=False,
+        header_style="bold",
+        title_style="bold cyan",
+    )
+    table.add_column("implementation")
+    table.add_column("p50 ms", justify="right")
+    table.add_column("p95 ms", justify="right")
+    table.add_column("mean ms", justify="right")
+    table.add_column("TFLOP/s", justify="right")
+    table.add_column("vs torch", justify="right")
+    table.add_column("vs naive", justify="right")
+    table.add_column("max abs err", justify="right")
+    table.add_column("est global GiB", justify="right")
 
-
-def format_benchmark_table(rows: list[dict[str, Any]]) -> str:
-    headers = [
-        "implementation",
-        "p50 ms",
-        "p95 ms",
-        "mean ms",
-        "TFLOP/s",
-        "vs torch",
-        "vs naive",
-        "max abs err",
-        "est global GiB",
-    ]
-    table_rows = [
-        [
-            row["implementation"],
+    for row in rows:
+        table.add_row(
+            str(row["implementation"]),
             format_float(row["p50_ms"]),
             format_float(row["p95_ms"]),
             format_float(row["mean_ms"]),
@@ -48,18 +55,21 @@ def format_benchmark_table(rows: list[dict[str, Any]]) -> str:
             format_float(row["speedup_vs_naive"], digits=3),
             format_float(row["max_abs_error"], digits=2),
             format_bytes_as_gib(row["estimated_global_memory_bytes"]),
-        ]
-        for row in rows
-    ]
-    widths = [
-        max(len(str(cell)) for cell in column)
-        for column in zip(headers, *table_rows, strict=True)
-    ]
+        )
+    return table
 
-    separator = "  ".join("-" * width for width in widths)
-    lines = [format_table_row(headers, widths), separator]
-    lines.extend(format_table_row(row, widths) for row in table_rows)
-    return "\n".join(lines)
+
+def format_benchmark_table(rows: list[dict[str, Any]]) -> str:
+    buffer = StringIO()
+    console = Console(
+        color_system=None,
+        file=buffer,
+        force_terminal=False,
+        highlight=False,
+        width=120,
+    )
+    console.print(build_benchmark_table(rows))
+    return buffer.getvalue().rstrip()
 
 
 def normalize_result_rows(result: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -79,7 +89,7 @@ def write_benchmark_result(
         raise ValueError(f"unknown output format: {output_format}")
 
     if output is None:
-        print(payload)
+        print(payload, flush=True)
         return
 
     output.parent.mkdir(parents=True, exist_ok=True)

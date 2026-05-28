@@ -10,10 +10,7 @@ From the repository root:
 
 ```bash
 uv sync --extra dev
-make env
-make test
-make bench-matmul
-make profile-matmul
+make quickstart
 make build-cpp
 ```
 
@@ -22,8 +19,7 @@ Expected result:
 - `make env` reports PyTorch installed.
 - CUDA may be unavailable on CPU-only machines.
 - `make test` passes.
-- `make bench-matmul` prints benchmark JSON.
-- `make profile-matmul` requires a CUDA machine; skip it on CPU-only machines.
+- `make bench-matmul-table` prints a readable CPU benchmark table.
 - `make build-cpp` builds the native bridge.
 
 CPU benchmark output is useful for harness validation, not GPU performance claims.
@@ -48,7 +44,7 @@ cd forgenpu-kernels
 uv sync --extra dev
 make env
 make test
-make bench-matmul
+make bench-matmul-gpu
 make profile-matmul
 make build-cpp
 ```
@@ -58,7 +54,7 @@ The GPU run should show:
 - an NVIDIA GPU in `nvidia-smi`,
 - `cuda_available: true` in `make env`,
 - a non-null PyTorch CUDA version compatible with the installed NVIDIA driver,
-- benchmark JSON with `"device"` set to the GPU name,
+- a benchmark table with `torch`, `cuda_naive`, and `cuda_tiled`,
 - passing correctness tests,
 - profiler output or an explicit profiler fallback note,
 - successful C++ bridge build.
@@ -70,19 +66,19 @@ For M2, `make test` should run the CUDA matmul tests instead of skipping them.
 For a small smoke benchmark:
 
 ```bash
-uv run python benchmarks/bench_matmul.py --shape 512 512 512 --warmup 5 --iterations 20
+uv run forgenpu-bench-matmul --shape 512 512 512 --warmup 5 --iterations 20
 ```
 
 For a larger M1-ready baseline:
 
 ```bash
-uv run python benchmarks/bench_matmul.py --shape 1024 1024 1024 --warmup 25 --iterations 100
+uv run forgenpu-bench-matmul --shape 1024 1024 1024 --warmup 25 --iterations 100
 ```
 
 For PyTorch vs custom CUDA:
 
 ```bash
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --implementation all \
   --device cuda \
   --shape 512 512 512 \
@@ -93,7 +89,7 @@ uv run python benchmarks/bench_matmul.py \
 For a human-readable RunPod check:
 
 ```bash
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --implementation all \
   --device cuda \
   --shape 1024 1024 1024 \
@@ -105,7 +101,7 @@ uv run python benchmarks/bench_matmul.py \
 Save generated benchmark outputs under `results/` when needed:
 
 ```bash
-uv run python benchmarks/bench_matmul.py \
+uv run forgenpu-bench-matmul \
   --shape 1024 1024 1024 \
   --warmup 25 \
   --iterations 100 \
@@ -132,7 +128,7 @@ M2 is reproduced on GPU when the following command sequence succeeds:
 uv sync --extra dev
 make env
 make test
-uv run python benchmarks/bench_matmul.py --implementation all --device cuda --shape 1024 1024 1024 --warmup 25 --iterations 100
+uv run forgenpu-bench-matmul --implementation all --device cuda --shape 1024 1024 1024 --warmup 25 --iterations 100
 scripts/profile_matmul.sh 1024 1024 1024
 make build-cpp
 ```
