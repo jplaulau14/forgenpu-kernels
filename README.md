@@ -96,6 +96,18 @@ uv run python benchmarks/bench_matmul.py \
   --iterations 20
 ```
 
+Use the table format for interactive runs:
+
+```bash
+uv run python benchmarks/bench_matmul.py \
+  --implementation all \
+  --device cuda \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
 Configure and build the C++ bridge:
 
 ```bash
@@ -132,6 +144,8 @@ M2 supports:
 - `--implementation cuda_naive`
 - `--implementation cuda_tiled`
 - `--implementation all`
+- `--format json` for scripts and saved artifacts
+- `--format table` for interactive reading
 
 The CUDA implementations only support FP32 CUDA tensors. Benchmark records include estimated FLOPs, achieved TFLOP/s, compulsory IO bytes, and an estimated global-memory byte count for custom kernels.
 

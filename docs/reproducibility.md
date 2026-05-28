@@ -90,6 +90,18 @@ uv run python benchmarks/bench_matmul.py \
   --iterations 100
 ```
 
+For a human-readable RunPod check:
+
+```bash
+uv run python benchmarks/bench_matmul.py \
+  --implementation all \
+  --device cuda \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
 Save generated benchmark outputs under `results/` when needed:
 
 ```bash

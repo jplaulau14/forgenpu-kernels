@@ -11,6 +11,7 @@ Current behavior:
 - use `torch.cuda.Event` on CUDA,
 - use `time.perf_counter_ns` on CPU,
 - report p50, p95, mean latency, correctness error, shape, dtype, and machine metadata.
+- write progress logs to stderr so long CUDA extension builds and benchmark runs do not look stalled.
 
 M2 implementations:
 
@@ -97,6 +98,20 @@ uv run python benchmarks/bench_matmul.py \
   --warmup 5 \
   --iterations 20
 ```
+
+Interactive table output:
+
+```bash
+uv run python benchmarks/bench_matmul.py \
+  --implementation all \
+  --device cuda \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
+Use `--quiet` when a script should suppress progress logs. JSON remains the default output format because it is the stable artifact format for saved benchmark results and profiler workflows.
 
 Profiler-backed matmul run:
 
