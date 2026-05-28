@@ -1,6 +1,6 @@
 # Profiler Notes
 
-No profiler artifact exists in M0.
+No profiler artifact exists in M1.
 
 The first profiler-backed note belongs to M2, after the tiled shared-memory CUDA matmul exists. That note should explain:
 

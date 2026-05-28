@@ -12,7 +12,7 @@ PyTorch reference
   -> docs and writeups
 ```
 
-M0 establishes the reference, test, benchmark, and build surfaces. M1 starts the first custom CUDA kernel.
+M0 established the reference, test, benchmark, and build surfaces. M1 adds the first custom CUDA kernel.
 
 ## Boundaries
 

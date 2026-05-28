@@ -2,7 +2,7 @@
 
 ForgeNPU Kernels is a CUDA/C++ and Triton transformer inference kernel systems project. The long-term target is a set of custom kernels, correctness tests, reproducible benchmarks, profiler-backed performance notes, and a minimal decoder-block execution path.
 
-This repository is intentionally starting from a small foundation. M0 establishes the project shape, environment checks, Python benchmark harness, CMake bridge, and the first PyTorch reference test. Custom CUDA kernels begin in M1.
+This repository is intentionally growing milestone by milestone. M0 established the project foundation. M1 adds the first real custom kernel: a naive FP32 CUDA matmul tested and benchmarked against `torch.matmul`.
 
 ## Why This Exists
 
@@ -16,18 +16,20 @@ Framework kernels are already strong. The point of this project is not to preten
 
 Every performance claim in this repo should include a baseline, shape, machine context, timing method, and limitations.
 
-## Current Milestone: M0
+## Current Milestone: M1
 
-M0 includes:
+M1 includes:
 
 - project structure for CUDA, Triton, Python, tests, benchmarks, scripts, and docs,
 - an environment check script,
 - a thin CMake/C++ bridge,
 - PyTorch reference operators,
-- one matmul correctness test,
-- one initial matmul benchmark command.
+- a naive FP32 CUDA matmul kernel,
+- Python binding through a PyTorch CUDA extension,
+- matmul correctness tests across square, rectangular, and projection-like shapes,
+- benchmark selection for PyTorch, CUDA naive, or both.
 
-M0 does not include a custom CUDA matmul yet.
+The naive CUDA kernel is intentionally simple. It is expected to lose to PyTorch on most realistic shapes. Its purpose is to prove custom CUDA integration, indexing correctness, benchmark discipline, and the baseline needed before shared-memory tiling in M2.
 
 ## Repository Layout
 
@@ -71,13 +73,24 @@ uv run python scripts/env_check.py
 Run the initial correctness test:
 
 ```bash
-uv run --extra dev pytest tests/test_matmul.py
+uv run --extra dev pytest
 ```
 
-Run the initial PyTorch matmul benchmark:
+Run the PyTorch matmul benchmark:
 
 ```bash
 uv run python benchmarks/bench_matmul.py --shape 512 512 512 --warmup 5 --iterations 20
+```
+
+Run PyTorch and the naive CUDA matmul on a CUDA machine:
+
+```bash
+uv run python benchmarks/bench_matmul.py \
+  --implementation all \
+  --device cuda \
+  --shape 512 512 512 \
+  --warmup 5 \
+  --iterations 20
 ```
 
 Configure and build the C++ bridge:
@@ -96,9 +109,11 @@ make bench-matmul
 make build-cpp
 ```
 
+For a GPU-backed reproducibility run, see [docs/reproducibility.md](docs/reproducibility.md).
+
 ## Benchmark Method
 
-The initial benchmark uses:
+The matmul benchmark uses:
 
 - warmup iterations before timing,
 - `torch.cuda.Event` timing on CUDA tensors,
@@ -107,11 +122,16 @@ The initial benchmark uses:
 - p50, p95, and mean latency,
 - machine and software metadata in the JSON output.
 
-This is only the baseline harness. Later milestones add custom CUDA, tiled CUDA, Tensor Core, and Triton implementations behind the same benchmark surface.
+M1 supports:
+
+- `--implementation torch`
+- `--implementation cuda_naive`
+- `--implementation all`
+
+The M1 CUDA implementation only supports FP32 CUDA tensors.
 
 ## Roadmap
 
-- M1: PyTorch matmul benchmark, naive CUDA matmul, correctness across at least three shapes.
 - M2: tiled shared-memory CUDA matmul, benchmark against naive and PyTorch, first profiler artifact.
 - M3: Triton matmul and CUDA-vs-Triton ergonomics note.
 - M4: Tensor Core matmul path with dtype and layout notes.
@@ -119,7 +139,7 @@ This is only the baseline harness. Later milestones add custom CUDA, tiled CUDA,
 
 ## Known Limits
 
-- The current benchmark is a PyTorch baseline only.
-- No custom CUDA kernel is exposed yet.
-- GPU profiling artifacts are not present in M0.
+- The custom CUDA matmul is naive and FP32-only.
+- The naive CUDA matmul requires a CUDA-capable PyTorch environment and nvcc.
+- GPU profiling artifacts are not present in M1.
 - CPU benchmark output is useful for harness validation, not GPU-kernel conclusions.
