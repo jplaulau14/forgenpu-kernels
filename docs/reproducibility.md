@@ -2,7 +2,7 @@
 
 This document describes how to reproduce the project validation path locally or on a GPU instance.
 
-M1 includes a naive FP32 CUDA matmul. The GPU run proves that the project environment, PyTorch CUDA visibility, correctness tests, benchmark harness, C++ bridge, and CUDA extension build work on a CUDA-capable machine.
+M2 includes naive and tiled FP32 CUDA matmul implementations. The GPU run proves that the project environment, PyTorch CUDA visibility, correctness tests, benchmark harness, profiler entry point, C++ bridge, and CUDA extension builds work on a CUDA-capable machine.
 
 ## Local CPU Validation
 
@@ -13,6 +13,7 @@ uv sync --extra dev
 make env
 make test
 make bench-matmul
+make profile-matmul
 make build-cpp
 ```
 
@@ -22,6 +23,7 @@ Expected result:
 - CUDA may be unavailable on CPU-only machines.
 - `make test` passes.
 - `make bench-matmul` prints benchmark JSON.
+- `make profile-matmul` requires a CUDA machine; skip it on CPU-only machines.
 - `make build-cpp` builds the native bridge.
 
 CPU benchmark output is useful for harness validation, not GPU performance claims.
@@ -47,6 +49,7 @@ uv sync --extra dev
 make env
 make test
 make bench-matmul
+make profile-matmul
 make build-cpp
 ```
 
@@ -57,9 +60,10 @@ The GPU run should show:
 - a non-null PyTorch CUDA version compatible with the installed NVIDIA driver,
 - benchmark JSON with `"device"` set to the GPU name,
 - passing correctness tests,
+- profiler output or an explicit profiler fallback note,
 - successful C++ bridge build.
 
-For M1, `make test` should run the CUDA matmul tests instead of skipping them.
+For M2, `make test` should run the CUDA matmul tests instead of skipping them.
 
 ## Benchmark Capture
 
@@ -75,7 +79,7 @@ For a larger M1-ready baseline:
 uv run python benchmarks/bench_matmul.py --shape 1024 1024 1024 --warmup 25 --iterations 100
 ```
 
-For PyTorch vs naive CUDA:
+For PyTorch vs custom CUDA:
 
 ```bash
 uv run python benchmarks/bench_matmul.py \
@@ -98,19 +102,30 @@ uv run python benchmarks/bench_matmul.py \
 
 Raw generated result files are ignored by default. Curated numbers should be copied into docs only when they are ready to explain.
 
+## Profiler Capture
+
+On a CUDA machine:
+
+```bash
+scripts/profile_matmul.sh 1024 1024 1024
+```
+
+The script writes generated artifacts under `results/profiles/`. Raw `.ncu-rep`, `.nsys-rep`, and benchmark JSON files are ignored by default. Curated summaries can be committed as Markdown when they support a documented claim.
+
 ## What Counts As Reproduced
 
-M1 is reproduced on GPU when the following command sequence succeeds:
+M2 is reproduced on GPU when the following command sequence succeeds:
 
 ```bash
 uv sync --extra dev
 make env
 make test
-make bench-matmul
+uv run python benchmarks/bench_matmul.py --implementation all --device cuda --shape 1024 1024 1024 --warmup 25 --iterations 100
+scripts/profile_matmul.sh 1024 1024 1024
 make build-cpp
 ```
 
-The environment output must show CUDA availability. The test output must include the CUDA matmul correctness tests, and the benchmark output must include a `cuda_naive` record when `--implementation all --device cuda` is used. If CUDA is unavailable on the GPU instance, the issue is environment setup, not the M1 harness.
+The environment output must show CUDA availability. The test output must include the CUDA matmul correctness tests, and the benchmark output must include `torch`, `cuda_naive`, and `cuda_tiled` records when `--implementation all --device cuda` is used. If CUDA is unavailable on the GPU instance, the issue is environment setup, not the M2 harness.
 
 ## PyTorch And Driver Compatibility
 

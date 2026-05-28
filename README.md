@@ -2,7 +2,7 @@
 
 ForgeNPU Kernels is a CUDA/C++ and Triton transformer inference kernel systems project. The long-term target is a set of custom kernels, correctness tests, reproducible benchmarks, profiler-backed performance notes, and a minimal decoder-block execution path.
 
-This repository is intentionally growing milestone by milestone. M0 established the project foundation. M1 adds the first real custom kernel: a naive FP32 CUDA matmul tested and benchmarked against `torch.matmul`.
+This repository is intentionally growing milestone by milestone. M0 established the project foundation, M1 added the first real custom CUDA kernel, and M2 adds a tiled shared-memory FP32 matmul for comparing global-memory reuse against the naive baseline.
 
 ## Why This Exists
 
@@ -16,20 +16,23 @@ Framework kernels are already strong. The point of this project is not to preten
 
 Every performance claim in this repo should include a baseline, shape, machine context, timing method, and limitations.
 
-## Current Milestone: M1
+## Current Milestone: M2
 
-M1 includes:
+M2 includes:
 
 - project structure for CUDA, Triton, Python, tests, benchmarks, scripts, and docs,
 - an environment check script,
 - a thin CMake/C++ bridge,
 - PyTorch reference operators,
 - a naive FP32 CUDA matmul kernel,
+- a tiled shared-memory FP32 CUDA matmul kernel,
 - Python binding through a PyTorch CUDA extension,
 - matmul correctness tests across square, rectangular, and projection-like shapes,
-- benchmark selection for PyTorch, CUDA naive, or both.
+- benchmark selection for PyTorch, CUDA naive, CUDA tiled, or all implementations,
+- profiler capture script for matmul,
+- first roofline-style note explaining arithmetic intensity and memory traffic.
 
-The naive CUDA kernel is intentionally simple. It is expected to lose to PyTorch on most realistic shapes. Its purpose is to prove custom CUDA integration, indexing correctness, benchmark discipline, and the baseline needed before shared-memory tiling in M2.
+The tiled CUDA kernel is still intentionally simple. It is expected to improve over the naive kernel on meaningful GPU shapes, but it is not expected to beat PyTorch. Its purpose is to prove shared-memory tiling, benchmark discipline, and profiler-backed interpretation before Tensor Core work.
 
 ## Repository Layout
 
@@ -82,7 +85,7 @@ Run the PyTorch matmul benchmark:
 uv run python benchmarks/bench_matmul.py --shape 512 512 512 --warmup 5 --iterations 20
 ```
 
-Run PyTorch and the naive CUDA matmul on a CUDA machine:
+Run PyTorch, naive CUDA, and tiled CUDA matmul on a CUDA machine:
 
 ```bash
 uv run python benchmarks/bench_matmul.py \
@@ -106,6 +109,7 @@ The same commands are available through `make`:
 make env
 make test
 make bench-matmul
+make profile-matmul
 make build-cpp
 ```
 
@@ -122,24 +126,24 @@ The matmul benchmark uses:
 - p50, p95, and mean latency,
 - machine and software metadata in the JSON output.
 
-M1 supports:
+M2 supports:
 
 - `--implementation torch`
 - `--implementation cuda_naive`
+- `--implementation cuda_tiled`
 - `--implementation all`
 
-The M1 CUDA implementation only supports FP32 CUDA tensors.
+The CUDA implementations only support FP32 CUDA tensors. Benchmark records include estimated FLOPs, achieved TFLOP/s, compulsory IO bytes, and an estimated global-memory byte count for custom kernels.
 
 ## Roadmap
 
-- M2: tiled shared-memory CUDA matmul, benchmark against naive and PyTorch, first profiler artifact.
 - M3: Triton matmul and CUDA-vs-Triton ergonomics note.
 - M4: Tensor Core matmul path with dtype and layout notes.
 - M5-M10: normalization, softmax, RoPE, KV cache, attention, FlashAttention-style attention, and decoder-block integration.
 
 ## Known Limits
 
-- The custom CUDA matmul is naive and FP32-only.
-- The naive CUDA matmul requires a CUDA-capable PyTorch environment and nvcc.
-- GPU profiling artifacts are not present in M1.
+- The custom CUDA matmul implementations are FP32-only.
+- The CUDA matmul implementations require a CUDA-capable PyTorch environment and nvcc.
+- The tiled kernel uses shared-memory tiling, but no register blocking, Tensor Cores, vectorized loads, or layout transforms.
 - CPU benchmark output is useful for harness validation, not GPU-kernel conclusions.

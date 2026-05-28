@@ -19,9 +19,10 @@ dist/
 *.dll
 *.a
 
-results/*.json
-results/*.jsonl
-results/*.csv
-results/*.nsys-rep
-results/*.ncu-rep
+results/**/*.json
+results/**/*.jsonl
+results/**/*.csv
+results/**/*.nsys-rep
+results/**/*.ncu-rep
+results/**/*.sqlite
 !results/.gitkeep

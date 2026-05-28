@@ -23,6 +23,10 @@ def _matmul_naive_source() -> Path:
     return Path(__file__).resolve().parents[1] / "kernels" / "cuda" / "matmul" / "matmul_naive.cu"
 
 
+def _matmul_tiled_source() -> Path:
+    return Path(__file__).resolve().parents[1] / "kernels" / "cuda" / "matmul" / "matmul_tiled.cu"
+
+
 def has_cuda_matmul_naive() -> bool:
     """Return whether the current environment can build and run the M1 CUDA matmul."""
     try:
@@ -36,8 +40,21 @@ def has_cuda_matmul_naive() -> bool:
     return bool(torch.cuda.is_available() and CUDA_HOME and _matmul_naive_source().exists())
 
 
+def has_cuda_matmul_tiled() -> bool:
+    """Return whether the current environment can build and run the M2 CUDA matmul."""
+    try:
+        torch = _require_torch()
+        from torch.utils.cpp_extension import CUDA_HOME
+    except RuntimeError:
+        return False
+    except ImportError:
+        return False
+
+    return bool(torch.cuda.is_available() and CUDA_HOME and _matmul_tiled_source().exists())
+
+
 @lru_cache(maxsize=1)
-def _load_matmul_extension() -> Any:
+def _load_matmul_naive_extension() -> Any:
     torch = _require_torch()
     if not torch.cuda.is_available():
         raise RuntimeError("Naive CUDA matmul requires a CUDA-capable PyTorch environment.")
@@ -61,6 +78,36 @@ def _load_matmul_extension() -> Any:
     )
 
 
+@lru_cache(maxsize=1)
+def _load_matmul_tiled_extension() -> Any:
+    torch = _require_torch()
+    if not torch.cuda.is_available():
+        raise RuntimeError("Tiled CUDA matmul requires a CUDA-capable PyTorch environment.")
+
+    from torch.utils.cpp_extension import CUDA_HOME, load
+
+    if CUDA_HOME is None:
+        raise RuntimeError("Tiled CUDA matmul requires a CUDA toolkit with nvcc available.")
+
+    source = _matmul_tiled_source()
+    if not source.exists():
+        raise RuntimeError(f"Tiled CUDA matmul source not found: {source}")
+
+    verbose = os.environ.get("FORGENPU_EXT_VERBOSE", "0") == "1"
+    return load(
+        name="forgenpu_matmul_tiled",
+        sources=[str(source)],
+        extra_cflags=["-O2"],
+        extra_cuda_cflags=["-O2"],
+        verbose=verbose,
+    )
+
+
 def cuda_matmul_naive(a, b):
     """Run the M1 naive FP32 CUDA matmul kernel."""
-    return _load_matmul_extension().matmul_naive(a, b)
+    return _load_matmul_naive_extension().matmul_naive(a, b)
+
+
+def cuda_matmul_tiled(a, b):
+    """Run the M2 tiled shared-memory FP32 CUDA matmul kernel."""
+    return _load_matmul_tiled_extension().matmul_tiled(a, b)
