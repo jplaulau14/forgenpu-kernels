@@ -72,6 +72,8 @@ This target sets `REQUIRE_NCU=1`. It fails if the `ncu` executable is missing, t
 
 If the output says `No kernels were profiled`, `ncu` was installed but did not capture the target kernel. The profile script now treats that as a failed Nsight Compute run and writes the full `ncu` log under `results/profiles/`.
 
+The Nsight Compute path first runs a target smoke test without `ncu` and writes the log to `results/profiles/*_target_smoke.log`. If that smoke test fails, debug the CUDA extension or Python environment before debugging Nsight. If the smoke test passes but `ncu` still reports no kernels, the failure is in profiler attachment, CUDA profiler API handling, or the rented GPU container permissions.
+
 The Makefile does not install Nsight tools. Nsight Compute and Nsight Systems are NVIDIA system tools that depend on the GPU image, CUDA/toolkit installation, container permissions, and host driver configuration. The repo checks and uses them; the rented GPU image should provide them, or they should be installed through the provider's supported image/package flow.
 
 For M2, `make test` should run the CUDA matmul tests instead of skipping them.

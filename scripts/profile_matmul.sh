@@ -18,11 +18,13 @@ PROFILE_ITERATIONS="${PROFILE_ITERATIONS:-10}"
 OUT_DIR="${OUT_DIR:-results/profiles}"
 NCU_TIMEOUT_SECONDS="${NCU_TIMEOUT_SECONDS:-120}"
 REQUIRE_NCU="${REQUIRE_NCU:-0}"
+PROFILE_PYTHON="${PROFILE_PYTHON:-}"
 
 mkdir -p "${OUT_DIR}"
 
 shape_label="${M}x${N}x${K}"
 benchmark_output="${OUT_DIR}/matmul_m2_${shape_label}_benchmark.json"
+target_smoke_log="${OUT_DIR}/matmul_tiled_${shape_label}_target_smoke.log"
 ncu_report_base="${OUT_DIR}/matmul_tiled_${shape_label}_ncu"
 ncu_report="${ncu_report_base}.ncu-rep"
 ncu_log="${OUT_DIR}/matmul_tiled_${shape_label}_ncu.log"
@@ -70,6 +72,15 @@ run_logged_with_optional_timeout() {
   fi
 }
 
+resolve_profile_python() {
+  if [[ -n "${PROFILE_PYTHON}" ]]; then
+    printf '%s\n' "${PROFILE_PYTHON}"
+    return
+  fi
+
+  uv run python -c 'import sys; print(sys.executable)'
+}
+
 nsight_compute_profile_succeeded() {
   [[ -s "${ncu_report}" ]] && ! grep -qi "No kernels were profiled" "${ncu_log}"
 }
@@ -104,6 +115,7 @@ check_environment() {
   fi
 
   uv run python -c 'import torch; print(f"[profile-matmul] torch={torch.__version__} cuda_available={torch.cuda.is_available()} cuda={torch.version.cuda}")' >&2
+  log "profile_python=$(resolve_profile_python)"
 
   if ! have_command ncu; then
     log "Nsight Compute CLI was not found. Strict NCU profiling will fail."
@@ -185,20 +197,28 @@ uv run forgenpu-bench-matmul \
 log "Benchmark JSON: ${benchmark_output}"
 
 if command -v ncu >/dev/null 2>&1; then
+  profile_python="$(resolve_profile_python)"
+  log "Smoke-testing dedicated Nsight target before ncu"
+  run_logged "${target_smoke_log}" \
+    "${profile_python}" -m forgenpu_kernels.cli.profile_matmul_ncu_target \
+      --shape "${M}" "${N}" "${K}" \
+      --warmup 1 \
+      --iterations 1
+  log "Nsight target smoke log: ${target_smoke_log}"
+
   ncu_command=(
     ncu
-    --target-processes all \
-    --kernel-name-base function \
-    --kernel-name regex:matmul_tiled_kernel \
+    --profile-from-start off \
     --launch-count 1 \
     --section LaunchStats \
     --section Occupancy \
     --force-overwrite \
     --export "${ncu_report_base}" \
-    uv run python -m forgenpu_kernels.cli.profile_matmul_ncu_target \
+    "${profile_python}" -m forgenpu_kernels.cli.profile_matmul_ncu_target \
       --shape "${M}" "${N}" "${K}" \
       --warmup "${PROFILE_WARMUP}" \
-      --iterations "${PROFILE_ITERATIONS}"
+      --iterations "${PROFILE_ITERATIONS}" \
+      --cuda-profiler-api
   )
 
   log "Attempting Nsight Compute (ncu)"

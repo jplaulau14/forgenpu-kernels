@@ -20,7 +20,7 @@ make profile-matmul-ncu
 
 This fails instead of falling back if `ncu` is missing, times out, or does not produce a `.ncu-rep` report.
 
-The script captures a benchmark JSON file and then tries profiler tools in this order:
+The script captures a benchmark JSON file, smoke-tests the dedicated profiling target, and then tries profiler tools in this order:
 
 1. Nsight Compute (`ncu`) with launch statistics and occupancy sections, time-boxed by `NCU_TIMEOUT_SECONDS`.
 2. Nsight Systems (`nsys`) timeline capture if `ncu` is unavailable or does not produce a usable kernel report.
@@ -33,7 +33,7 @@ The Nsight Compute path profiles a small dedicated target:
 uv run python -m forgenpu_kernels.cli.profile_matmul_ncu_target
 ```
 
-This avoids profiling the full benchmark harness and makes it easier for `ncu` to match the actual `matmul_tiled_kernel` launch. The command uses `--kernel-name-base function` and `--kernel-name regex:matmul_tiled_kernel`.
+This avoids profiling the full benchmark harness. The shell script resolves the virtualenv Python executable first and runs `ncu` directly against Python instead of profiling the `uv` launcher. The target warms up the tiled kernel, calls `cudaProfilerStart`, runs the measured tiled launches, then calls `cudaProfilerStop`. The `ncu` command uses `--profile-from-start off` so setup kernels from PyTorch tensor allocation and extension loading are not collected.
 
 Raw `.ncu-rep`, `.nsys-rep`, and generated benchmark JSON files are ignored by git because they are machine-specific. Curated observations belong in this file, `docs/roofline.md`, or a committed summary under `results/profiles/`.
 
