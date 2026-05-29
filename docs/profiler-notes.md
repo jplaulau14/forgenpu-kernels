@@ -6,12 +6,34 @@ M2 adds the first profiler entry point:
 scripts/profile_matmul.sh 1024 1024 1024
 ```
 
+Before running the full profile, check tool availability:
+
+```bash
+make profile-check
+```
+
+When Nsight Compute evidence is required, use strict mode:
+
+```bash
+make profile-matmul-ncu
+```
+
+This fails instead of falling back if `ncu` is missing, times out, or does not produce a `.ncu-rep` report.
+
 The script captures a benchmark JSON file and then tries profiler tools in this order:
 
 1. Nsight Compute (`ncu`) with launch statistics and occupancy sections, time-boxed by `NCU_TIMEOUT_SECONDS`.
-2. Nsight Systems (`nsys`) timeline capture.
-3. PyTorch profiler trace if Nsight Compute does not complete.
+2. Nsight Systems (`nsys`) timeline capture if `ncu` is unavailable or does not produce a usable kernel report.
+3. PyTorch profiler trace if the Nsight tools do not produce a usable report.
 4. A fallback text note if no profiler executable is installed.
+
+The Nsight Compute path profiles a small dedicated target:
+
+```bash
+uv run python -m forgenpu_kernels.cli.profile_matmul_ncu_target
+```
+
+This avoids profiling the full benchmark harness and makes it easier for `ncu` to match the actual `matmul_tiled_kernel` launch. The command uses `--kernel-name-base function` and `--kernel-name regex:matmul_tiled_kernel`.
 
 Raw `.ncu-rep`, `.nsys-rep`, and generated benchmark JSON files are ignored by git because they are machine-specific. Curated observations belong in this file, `docs/roofline.md`, or a committed summary under `results/profiles/`.
 

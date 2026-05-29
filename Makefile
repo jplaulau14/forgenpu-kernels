@@ -1,4 +1,4 @@
-.PHONY: help quickstart env test lint bench-matmul bench-matmul-table bench-matmul-gpu profile-matmul configure-cpp build-cpp clean
+.PHONY: help quickstart env test lint bench-matmul bench-matmul-table bench-matmul-gpu profile-check profile-matmul profile-matmul-ncu configure-cpp build-cpp clean
 
 help:
 	@echo "ForgeNPU quick commands"
@@ -9,7 +9,9 @@ help:
 	@echo "  make bench-matmul      - run a JSON CPU/PyTorch matmul benchmark"
 	@echo "  make bench-matmul-table - run a readable CPU/PyTorch matmul benchmark"
 	@echo "  make bench-matmul-gpu  - run M2 CUDA comparison on a GPU machine"
+	@echo "  make profile-check     - print CUDA/Nsight profiler environment facts"
 	@echo "  make profile-matmul    - run M2 profiler workflow on a GPU machine"
+	@echo "  make profile-matmul-ncu - require Nsight Compute report generation"
 
 quickstart: env lint test bench-matmul-table
 
@@ -31,8 +33,14 @@ bench-matmul-table:
 bench-matmul-gpu:
 	uv run forgenpu-bench-matmul --implementation all --device cuda --shape 1024 1024 1024 --warmup 25 --iterations 100 --format table
 
+profile-check:
+	scripts/profile_matmul.sh --check 1024 1024 1024
+
 profile-matmul:
 	scripts/profile_matmul.sh 1024 1024 1024
+
+profile-matmul-ncu:
+	REQUIRE_NCU=1 scripts/profile_matmul.sh 1024 1024 1024
 
 configure-cpp:
 	cmake -S . -B build

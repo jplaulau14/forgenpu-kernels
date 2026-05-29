@@ -45,6 +45,7 @@ uv sync --extra dev
 make env
 make test
 make bench-matmul-gpu
+make profile-check
 make profile-matmul
 make build-cpp
 ```
@@ -60,6 +61,18 @@ The GPU run should show:
 - passing correctness tests,
 - profiler output or an explicit profiler fallback note,
 - successful C++ bridge build.
+
+Use strict Nsight Compute mode when the goal is to prove `ncu` works, not just to get any profiler artifact:
+
+```bash
+make profile-matmul-ncu
+```
+
+This target sets `REQUIRE_NCU=1`. It fails if the `ncu` executable is missing, times out, or does not produce a `.ncu-rep` report.
+
+If the output says `No kernels were profiled`, `ncu` was installed but did not capture the target kernel. The profile script now treats that as a failed Nsight Compute run and writes the full `ncu` log under `results/profiles/`.
+
+The Makefile does not install Nsight tools. Nsight Compute and Nsight Systems are NVIDIA system tools that depend on the GPU image, CUDA/toolkit installation, container permissions, and host driver configuration. The repo checks and uses them; the rented GPU image should provide them, or they should be installed through the provider's supported image/package flow.
 
 For M2, `make test` should run the CUDA matmul tests instead of skipping them.
 
@@ -120,7 +133,21 @@ On a CUDA machine:
 scripts/profile_matmul.sh 1024 1024 1024
 ```
 
-The script writes generated artifacts under `results/profiles/`. Raw `.ncu-rep`, `.nsys-rep`, and benchmark JSON files are ignored by default. Curated summaries can be committed as Markdown when they support a documented claim.
+The script writes generated artifacts under `results/profiles/`. Raw `.ncu-rep`, `.nsys-rep`, logs, traces, and benchmark JSON files are ignored by default. Curated summaries can be committed as Markdown when they support a documented claim.
+
+Before profiling, inspect the environment:
+
+```bash
+make profile-check
+```
+
+The profiler workflow logs each major step with a `[profile-matmul]` prefix. Look for one of these result markers:
+
+- `PROFILE_RESULT=nsight_compute`
+- `PROFILE_RESULT=nsight_systems`
+- `PROFILE_RESULT=no_profiler`
+
+For hardware-counter profiling, prefer `PROFILE_RESULT=nsight_compute`.
 
 ## What Counts As Reproduced
 
