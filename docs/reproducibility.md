@@ -74,6 +74,8 @@ If the output says `No kernels were profiled`, `ncu` was installed but did not c
 
 The Nsight Compute path first runs a target smoke test without `ncu` and writes the log to `results/profiles/*_target_smoke.log`. If that smoke test fails, debug the CUDA extension or Python environment before debugging Nsight. If the smoke test passes but `ncu` still reports no kernels, the failure is in profiler attachment, CUDA profiler API handling, or the rented GPU container permissions.
 
+`make profile-check` should report a `ninja` executable. PyTorch uses Ninja to build the CUDA extension at runtime. If `ninja` is missing after pulling new code, run `uv sync --extra dev` again before profiling.
+
 The Makefile does not install Nsight tools. Nsight Compute and Nsight Systems are NVIDIA system tools that depend on the GPU image, CUDA/toolkit installation, container permissions, and host driver configuration. The repo checks and uses them; the rented GPU image should provide them, or they should be installed through the provider's supported image/package flow.
 
 For M2, `make test` should run the CUDA matmul tests instead of skipping them.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -54,6 +55,18 @@ def _missing_source_message(kernel: str, source: Path) -> str:
     )
 
 
+def _ninja_available() -> bool:
+    return shutil.which("ninja") is not None
+
+
+def _missing_ninja_message(kernel: str) -> str:
+    return (
+        f"{kernel} requires ninja to build PyTorch C++/CUDA extensions. "
+        "Run `uv sync --extra dev` from the repository root and make sure the virtualenv "
+        "bin directory is on PATH."
+    )
+
+
 def _matmul_naive_source() -> Path:
     return _kernel_source(MATMUL_NAIVE)
 
@@ -71,7 +84,7 @@ def _has_cuda_extension(spec: CudaExtensionSpec) -> bool:
     except ImportError:
         return False
 
-    return bool(torch.cuda.is_available() and CUDA_HOME and _kernel_source(spec).exists())
+    return bool(torch.cuda.is_available() and CUDA_HOME and _kernel_source(spec).exists() and _ninja_available())
 
 
 def has_cuda_matmul_naive() -> bool:
@@ -94,6 +107,9 @@ def _load_cuda_extension(spec: CudaExtensionSpec) -> Any:
 
     if CUDA_HOME is None:
         raise RuntimeError(f"{spec.label} requires a CUDA toolkit with nvcc available.")
+
+    if not _ninja_available():
+        raise RuntimeError(_missing_ninja_message(spec.label))
 
     source = _kernel_source(spec)
     if not source.exists():

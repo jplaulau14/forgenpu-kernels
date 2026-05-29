@@ -81,6 +81,20 @@ resolve_profile_python() {
   uv run python -c 'import sys; print(sys.executable)'
 }
 
+ensure_profile_python_bin_on_path() {
+  local python_path="$1"
+  local python_bin_dir
+  python_bin_dir="$(dirname "${python_path}")"
+
+  case ":${PATH}:" in
+    *":${python_bin_dir}:"*) ;;
+    *)
+      export PATH="${python_bin_dir}:${PATH}"
+      log "Prepended profile Python bin directory to PATH: ${python_bin_dir}"
+      ;;
+  esac
+}
+
 nsight_compute_profile_succeeded() {
   [[ -s "${ncu_report}" ]] && ! grep -qi "No kernels were profiled" "${ncu_log}"
 }
@@ -115,7 +129,10 @@ check_environment() {
   fi
 
   uv run python -c 'import torch; print(f"[profile-matmul] torch={torch.__version__} cuda_available={torch.cuda.is_available()} cuda={torch.version.cuda}")' >&2
-  log "profile_python=$(resolve_profile_python)"
+  profile_python="$(resolve_profile_python)"
+  ensure_profile_python_bin_on_path "${profile_python}"
+  log "profile_python=${profile_python}"
+  print_tool_version ninja ninja --version
 
   if ! have_command ncu; then
     log "Nsight Compute CLI was not found. Strict NCU profiling will fail."
@@ -198,6 +215,7 @@ log "Benchmark JSON: ${benchmark_output}"
 
 if command -v ncu >/dev/null 2>&1; then
   profile_python="$(resolve_profile_python)"
+  ensure_profile_python_bin_on_path "${profile_python}"
   log "Smoke-testing dedicated Nsight target before ncu"
   run_logged "${target_smoke_log}" \
     "${profile_python}" -m forgenpu_kernels.cli.profile_matmul_ncu_target \
