@@ -31,6 +31,7 @@ ncu_report="${ncu_report_base}.ncu-rep"
 ncu_log="${OUT_DIR}/matmul_tiled_${shape_label}_ncu.log"
 nsys_report_base="${OUT_DIR}/matmul_tiled_${shape_label}_nsys"
 nsys_report="${nsys_report_base}.nsys-rep"
+nsys_raw_stream="${nsys_report_base}.qdstrm"
 nsys_log="${OUT_DIR}/matmul_tiled_${shape_label}_nsys.log"
 torch_profile_log="${OUT_DIR}/matmul_tiled_${shape_label}_torch_profile_run.log"
 
@@ -98,6 +99,14 @@ ensure_profile_python_bin_on_path() {
 
 nsight_compute_profile_succeeded() {
   [[ -s "${ncu_report}" ]] && ! grep -qi "No kernels were profiled" "${ncu_log}"
+}
+
+nsight_systems_report_succeeded() {
+  [[ -s "${nsys_report}" ]]
+}
+
+nsight_systems_raw_stream_exists() {
+  [[ -s "${nsys_raw_stream}" ]]
 }
 
 print_tool_version() {
@@ -177,10 +186,28 @@ run_nsight_systems_profile() {
       --warmup "${PROFILE_WARMUP}" \
       --iterations "${PROFILE_ITERATIONS}" \
       --quiet; then
-    log "PROFILE_RESULT=nsight_systems"
-    log "Nsight Systems report: ${nsys_report}"
+    if nsight_systems_report_succeeded; then
+      log "PROFILE_RESULT=nsight_systems"
+      log "Nsight Systems report: ${nsys_report}"
+      log "Nsight Systems log: ${nsys_log}"
+      return 0
+    fi
+
+    if nsight_systems_raw_stream_exists; then
+      log "PROFILE_RESULT=nsight_systems_raw_stream"
+      log "Nsight Systems generated raw QDSTRM stream but did not import an .nsys-rep report."
+      log "Nsight Systems raw stream: ${nsys_raw_stream}"
+      log "This usually means the nsys importer binary or one of its dependencies is missing."
+      log "Install the full Nsight Systems package/importer dependencies or open/import the QDSTRM on a machine with Nsight Systems."
+      log "Nsight Systems log: ${nsys_log}"
+      return 0
+    fi
+
+    log "Nsight Systems exited successfully, but no .nsys-rep or .qdstrm artifact was found."
+    log "Expected report: ${nsys_report}"
+    log "Expected raw stream: ${nsys_raw_stream}"
     log "Nsight Systems log: ${nsys_log}"
-    return 0
+    return 1
   fi
 
   log "Nsight Systems failed. Log: ${nsys_log}"

@@ -37,6 +37,23 @@ PROFILE_TOOL=nsys scripts/profile_matmul.sh 1024 1024 1024
 PROFILE_TOOL=torch scripts/profile_matmul.sh 1024 1024 1024
 ```
 
+If `nsys` prints an importer error like:
+
+```text
+Importer error status: The importer binary and its dependencies were not found.
+Unable to retrieve the importer version: skipping importation of the QDSTRM file.
+Generated:
+    results/profiles/matmul_tiled_1024x1024x1024_nsys.qdstrm
+```
+
+then Nsight Systems captured a raw `.qdstrm` stream but did not produce the final `.nsys-rep` report. The script records this as:
+
+```text
+PROFILE_RESULT=nsight_systems_raw_stream
+```
+
+This is partial evidence: the profiler launched and captured a timeline stream, but the local container lacks the importer needed to turn it into a normal report. Install the full Nsight Systems package/importer dependencies, or copy the `.qdstrm` to a machine with Nsight Systems and import/open it there.
+
 When Nsight Compute evidence is required, use strict mode:
 
 ```bash

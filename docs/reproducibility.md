@@ -104,6 +104,8 @@ make profile-matmul-nsys
 
 This target sets `PROFILE_TOOL=nsys` and fails if `nsys` is still unavailable or cannot produce a report. The default `make profile-matmul` target keeps `PROFILE_TOOL=auto`, which tries Nsight Compute first, then Nsight Systems, then the PyTorch profiler fallback.
 
+If `nsys` generates `.qdstrm` but reports that the importer binary or dependencies were not found, the run captured a raw Nsight Systems stream but did not produce the final `.nsys-rep` report. The script logs this as `PROFILE_RESULT=nsight_systems_raw_stream`. Treat it as partial profiler evidence and either install the full Nsight Systems package/importer dependencies or copy the `.qdstrm` to a machine with Nsight Systems for import.
+
 For M2, `make test` should run the CUDA matmul tests instead of skipping them.
 
 ## Benchmark Capture
@@ -175,6 +177,7 @@ The profiler workflow logs each major step with a `[profile-matmul]` prefix. Loo
 
 - `PROFILE_RESULT=nsight_compute`
 - `PROFILE_RESULT=nsight_systems`
+- `PROFILE_RESULT=nsight_systems_raw_stream`
 - `PROFILE_RESULT=no_profiler`
 
 For hardware-counter profiling, prefer `PROFILE_RESULT=nsight_compute`.
