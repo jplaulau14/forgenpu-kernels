@@ -49,6 +49,8 @@ make profile-matmul
 make build-cpp
 ```
 
+Run CUDA benchmarks from a repository checkout or editable install. M2 compiles `.cu` files from `kernels/cuda` through PyTorch extension loading; wheel-style packaging of those CUDA sources is not part of the current milestone.
+
 The GPU run should show:
 
 - an NVIDIA GPU in `nvidia-smi`,

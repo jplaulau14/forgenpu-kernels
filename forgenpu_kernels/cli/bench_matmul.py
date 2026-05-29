@@ -90,7 +90,7 @@ def benchmark(
 
     try:
         results = run_matmul_benchmark(config, progress=logger)
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError) as exc:
         typer.secho(str(exc), err=True, fg=typer.colors.RED)
         raise typer.Exit(1) from exc
 

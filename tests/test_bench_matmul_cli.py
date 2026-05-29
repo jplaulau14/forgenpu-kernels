@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 
@@ -91,3 +92,77 @@ def test_typer_cli_table_smoke() -> None:
     assert "implementation" in completed.stdout
     assert "torch" in completed.stdout
     assert completed.stderr == ""
+
+
+def test_typer_cli_json_smoke_has_stable_schema() -> None:
+    command = shutil.which("forgenpu-bench-matmul") or "forgenpu-bench-matmul"
+
+    completed = subprocess.run(
+        [
+            command,
+            "--implementation",
+            "torch",
+            "--device",
+            "cpu",
+            "--shape",
+            "8",
+            "8",
+            "8",
+            "--warmup",
+            "0",
+            "--iterations",
+            "1",
+            "--format",
+            "json",
+            "--quiet",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(completed.stdout)
+
+    assert payload["operator"] == "matmul"
+    assert payload["implementation"] == "torch"
+    assert payload["dtype"] == "float32"
+    assert payload["shape"] == {"m": 8, "n": 8, "k": 8}
+    assert payload["warmup"] == 0
+    assert payload["iterations"] == 1
+    assert payload["baseline"] == "torch.matmul"
+    assert payload["speedup_vs_baseline"] == 1.0
+    assert "p50_ms" in payload
+    assert "p95_ms" in payload
+    assert "mean_ms" in payload
+    assert "machine" in payload
+    assert completed.stderr == ""
+
+
+def test_typer_cli_invalid_iterations_exits_without_traceback() -> None:
+    command = shutil.which("forgenpu-bench-matmul") or "forgenpu-bench-matmul"
+
+    completed = subprocess.run(
+        [
+            command,
+            "--implementation",
+            "torch",
+            "--device",
+            "cpu",
+            "--shape",
+            "8",
+            "8",
+            "8",
+            "--warmup",
+            "0",
+            "--iterations",
+            "0",
+            "--quiet",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "--iterations must be positive" in completed.stderr
+    assert "Traceback" not in completed.stderr

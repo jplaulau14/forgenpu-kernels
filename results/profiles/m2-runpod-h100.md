@@ -62,6 +62,12 @@ The script generated:
 
 Raw generated JSON and traces are ignored. This Markdown file is the committed profiler summary.
 
+Evidence boundary:
+
+- This artifact proves the tiled CUDA kernel built, launched, and appeared in the PyTorch CUDA timeline.
+- This artifact does not include Nsight Compute hardware counters, so it should not be used to claim measured occupancy, memory bandwidth, register pressure, or stall reasons.
+- The memory-traffic numbers in the docs remain explanatory estimates until a successful hardware-counter profile is captured.
+
 PyTorch profiler summary for one `cuda_tiled` launch:
 
 ```text

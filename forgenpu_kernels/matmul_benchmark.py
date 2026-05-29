@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, TypedDict
 
 from forgenpu_kernels.benchmarks import benchmark_torch_callable, machine_info_dict
 from forgenpu_kernels.bindings import (
@@ -34,6 +34,39 @@ class MatmulBenchmarkConfig:
     device: str
     dtype: str
     implementation: MatmulImplementationSelection
+
+
+class ShapeRecord(TypedDict):
+    m: int
+    n: int
+    k: int
+
+
+class MatmulWorkloadMetrics(TypedDict):
+    estimated_flops: int
+    compulsory_io_bytes: int
+    estimated_global_memory_bytes: int | None
+    arithmetic_intensity_flop_per_byte: float | None
+    achieved_tflops: float | None
+
+
+class MatmulBenchmarkResult(MatmulWorkloadMetrics):
+    operator: str
+    implementation: MatmulImplementation
+    dtype: str
+    shape: ShapeRecord
+    warmup: int
+    iterations: int
+    baseline: str
+    max_abs_error: float
+    max_rel_error: float
+    p50_ms: float
+    p95_ms: float
+    mean_ms: float
+    device: str
+    machine: dict[str, Any]
+    speedup_vs_baseline: float | None
+    speedup_vs_naive: float | None
 
 
 def require_torch():
@@ -67,6 +100,16 @@ def validate_dtype_for_device(*, device: str, dtype, dtype_name: str) -> None:
         raise RuntimeError(f"{dtype_name} CPU timing is not used for the matmul benchmark harness")
 
 
+def validate_config(config: MatmulBenchmarkConfig) -> None:
+    m, n, k = config.shape
+    if min(m, n, k) <= 0:
+        raise RuntimeError(f"--shape values must be positive integers; got {m} {n} {k}")
+    if config.warmup < 0:
+        raise RuntimeError(f"--warmup must be non-negative; got {config.warmup}")
+    if config.iterations <= 0:
+        raise RuntimeError(f"--iterations must be positive; got {config.iterations}")
+
+
 def make_inputs(torch, *, m: int, n: int, k: int, device: str, dtype):
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
@@ -75,7 +118,9 @@ def make_inputs(torch, *, m: int, n: int, k: int, device: str, dtype):
     return a, b
 
 
-def matmul_workload_metrics(*, implementation: str, shape: tuple[int, int, int], p50_ms: float) -> dict:
+def matmul_workload_metrics(
+    *, implementation: str, shape: tuple[int, int, int], p50_ms: float
+) -> MatmulWorkloadMetrics:
     m, n, k = shape
     flops = 2 * m * n * k
     compulsory_io_bytes = 4 * ((m * k) + (k * n) + (m * n))
@@ -150,7 +195,7 @@ def benchmark_one(
     warmup: int,
     iterations: int,
     device: str,
-) -> dict[str, Any]:
+) -> MatmulBenchmarkResult:
     validate_implementation(implementation=implementation, dtype_name=dtype_name, device=device)
 
     benchmark_target = partial(run_implementation, implementation, a, b)
@@ -165,7 +210,7 @@ def benchmark_one(
     machine = machine_info_dict(device=device)
     m, n, k = shape
 
-    result = {
+    result: MatmulBenchmarkResult = {
         "operator": "matmul",
         "implementation": implementation,
         "dtype": dtype_name,
@@ -178,18 +223,18 @@ def benchmark_one(
         **timing,
         "device": machine["device"],
         "machine": machine,
-    }
-    result.update(
-        matmul_workload_metrics(
+        "speedup_vs_baseline": None,
+        "speedup_vs_naive": None,
+        **matmul_workload_metrics(
             implementation=implementation,
             shape=shape,
-            p50_ms=result["p50_ms"],
-        )
-    )
+            p50_ms=timing["p50_ms"],
+        ),
+    }
     return result
 
 
-def add_speedups(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def add_speedups(results: list[MatmulBenchmarkResult]) -> list[MatmulBenchmarkResult]:
     torch_p50 = p50_for_implementation(results, "torch")
     naive_p50 = p50_for_implementation(results, "cuda_naive")
 
@@ -199,7 +244,7 @@ def add_speedups(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return results
 
 
-def p50_for_implementation(results: list[dict[str, Any]], implementation: str) -> float | None:
+def p50_for_implementation(results: list[MatmulBenchmarkResult], implementation: str) -> float | None:
     return next(
         (result["p50_ms"] for result in results if result["implementation"] == implementation),
         None,
@@ -212,13 +257,15 @@ def speedup(baseline_p50_ms: float | None, p50_ms: float) -> float | None:
     return baseline_p50_ms / p50_ms
 
 
-def speedup_vs_naive(result: dict[str, Any], naive_p50_ms: float | None) -> float | None:
+def speedup_vs_naive(result: MatmulBenchmarkResult, naive_p50_ms: float | None) -> float | None:
     if result["implementation"] == "cuda_naive":
         return 1.0
     return speedup(naive_p50_ms, result["p50_ms"])
 
 
-def result_payload(results: list[dict[str, Any]]) -> dict[str, Any] | list[dict[str, Any]]:
+def result_payload(
+    results: list[MatmulBenchmarkResult],
+) -> MatmulBenchmarkResult | list[MatmulBenchmarkResult]:
     return results[0] if len(results) == 1 else results
 
 
@@ -226,7 +273,8 @@ def run_matmul_benchmark(
     config: MatmulBenchmarkConfig,
     *,
     progress: Callable[[str], None] | None = None,
-) -> list[dict[str, Any]]:
+) -> list[MatmulBenchmarkResult]:
+    validate_config(config)
     torch = require_torch()
     device = resolve_device(config.device)
     dtype = resolve_dtype(torch, config.dtype)
@@ -239,7 +287,7 @@ def run_matmul_benchmark(
     emit(progress, "computing torch.matmul correctness oracle")
     expected = torch.matmul(a, b)
 
-    results: list[dict[str, Any]] = []
+    results: list[MatmulBenchmarkResult] = []
     for implementation in selected_implementations(config.implementation):
         emit(progress, f"running {implementation} warmup={config.warmup} iterations={config.iterations}")
         results.append(

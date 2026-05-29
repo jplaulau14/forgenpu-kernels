@@ -223,5 +223,6 @@ The CUDA implementations only support FP32 CUDA tensors. Benchmark records inclu
 
 - The custom CUDA matmul implementations are FP32-only.
 - The CUDA matmul implementations require a CUDA-capable PyTorch environment and nvcc.
+- CUDA benchmark runs currently expect a source-tree checkout or editable install because the PyTorch extension loader compiles `.cu` files from `kernels/cuda`.
 - The tiled kernel uses shared-memory tiling, but no register blocking, Tensor Cores, vectorized loads, or layout transforms.
 - CPU benchmark output is useful for harness validation, not GPU-kernel conclusions.

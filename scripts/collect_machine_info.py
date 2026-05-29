@@ -4,12 +4,8 @@
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from forgenpu_kernels.benchmarks import machine_info_dict  # noqa: E402
+from forgenpu_kernels.benchmarks import machine_info_dict
 
 
 def main() -> None:

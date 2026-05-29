@@ -45,6 +45,21 @@ The first committed profiler summary is:
 
 The RunPod container exposed `ncu`, but the scripted Nsight Compute pass did not profile a kernel before timeout. The profiling workflow then fell back to PyTorch profiler and generated a CUDA timeline trace plus text summary.
 
+### What This Artifact Proves
+
+- The benchmark path ran on a CUDA-capable H100 environment.
+- The `cuda_tiled` extension built and launched.
+- The profiler observed `matmul_tiled_kernel` in the CUDA timeline.
+- The measured `cuda_tiled` latency improved over `cuda_naive` for the selected `1024 x 1024 x 1024` shape.
+
+### What This Artifact Does Not Prove Yet
+
+- It does not include Nsight Compute hardware-counter evidence for achieved memory bandwidth.
+- It does not prove occupancy, register pressure, or warp stall reasons.
+- It does not prove that global-memory traffic matched the explanatory estimates in `docs/roofline.md`.
+
+Those claims require a successful Nsight Compute counter run. Until then, M2 should describe memory traffic numbers as estimates and profiler evidence as CUDA timeline evidence.
+
 For one `1024 x 1024 x 1024` `cuda_tiled` launch, PyTorch profiler reported:
 
 ```text

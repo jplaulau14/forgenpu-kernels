@@ -51,7 +51,7 @@ if command -v ncu >/dev/null 2>&1; then
       echo "Nsight Compute report: ${OUT_DIR}/matmul_tiled_${shape_label}_ncu.ncu-rep"
     else
       echo "Nsight Compute did not complete; falling back to PyTorch profiler."
-      uv run python scripts/profile_matmul_torch.py \
+      uv run python -m forgenpu_kernels.cli.profile_matmul_torch \
         --shape "${M}" "${N}" "${K}" \
         --warmup "${PROFILE_WARMUP}" \
         --iterations "${PROFILE_ITERATIONS}" \
@@ -61,7 +61,7 @@ if command -v ncu >/dev/null 2>&1; then
     echo "Nsight Compute report: ${OUT_DIR}/matmul_tiled_${shape_label}_ncu.ncu-rep"
   else
     echo "Nsight Compute did not complete; falling back to PyTorch profiler."
-    uv run python scripts/profile_matmul_torch.py \
+    uv run python -m forgenpu_kernels.cli.profile_matmul_torch \
       --shape "${M}" "${N}" "${K}" \
       --warmup "${PROFILE_WARMUP}" \
       --iterations "${PROFILE_ITERATIONS}" \

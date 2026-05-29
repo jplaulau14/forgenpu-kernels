@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 from io import StringIO
 from pathlib import Path
-from typing import Any
 
 from rich import box
 from rich.console import Console
 from rich.table import Table
+
+from forgenpu_kernels.matmul_benchmark import MatmulBenchmarkResult
 
 
 def format_float(value: object, *, digits: int = 3) -> str:
@@ -26,7 +27,7 @@ def format_bytes_as_gib(value: object) -> str:
     return f"{int(value) / (1024**3):.3f}"
 
 
-def build_benchmark_table(rows: list[dict[str, Any]]) -> Table:
+def build_benchmark_table(rows: list[MatmulBenchmarkResult]) -> Table:
     table = Table(
         title="Matmul benchmark",
         box=box.ASCII,
@@ -59,7 +60,7 @@ def build_benchmark_table(rows: list[dict[str, Any]]) -> Table:
     return table
 
 
-def format_benchmark_table(rows: list[dict[str, Any]]) -> str:
+def format_benchmark_table(rows: list[MatmulBenchmarkResult]) -> str:
     buffer = StringIO()
     console = Console(
         color_system=None,
@@ -72,12 +73,14 @@ def format_benchmark_table(rows: list[dict[str, Any]]) -> str:
     return buffer.getvalue().rstrip()
 
 
-def normalize_result_rows(result: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
+def normalize_result_rows(
+    result: MatmulBenchmarkResult | list[MatmulBenchmarkResult],
+) -> list[MatmulBenchmarkResult]:
     return result if isinstance(result, list) else [result]
 
 
 def write_benchmark_result(
-    result: dict[str, Any] | list[dict[str, Any]],
+    result: MatmulBenchmarkResult | list[MatmulBenchmarkResult],
     output: Path | None,
     output_format: str,
 ) -> None:

@@ -1,15 +1,11 @@
-#!/usr/bin/env python
 """Capture a PyTorch profiler trace for the M2 tiled matmul."""
 
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from forgenpu_kernels.bindings import cuda_matmul_tiled  # noqa: E402
+from forgenpu_kernels.bindings import cuda_matmul_tiled
 
 
 def parse_args() -> argparse.Namespace:

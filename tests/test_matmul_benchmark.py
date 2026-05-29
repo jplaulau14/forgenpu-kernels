@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from forgenpu_kernels.matmul_benchmark import (
+    MatmulBenchmarkConfig,
     matmul_workload_metrics,
     result_payload,
     selected_implementations,
+    validate_config,
 )
 
 
@@ -31,3 +35,37 @@ def test_result_payload_unwraps_single_result_only() -> None:
 
     assert result_payload(one) == {"implementation": "torch"}
     assert result_payload(many) == many
+
+
+def test_validate_config_rejects_non_positive_shape_and_iterations() -> None:
+    valid = MatmulBenchmarkConfig(
+        shape=(8, 8, 8),
+        warmup=0,
+        iterations=1,
+        device="cpu",
+        dtype="float32",
+        implementation="torch",
+    )
+    validate_config(valid)
+
+    invalid_shape = MatmulBenchmarkConfig(
+        shape=(8, 0, 8),
+        warmup=0,
+        iterations=1,
+        device="cpu",
+        dtype="float32",
+        implementation="torch",
+    )
+    invalid_iterations = MatmulBenchmarkConfig(
+        shape=(8, 8, 8),
+        warmup=0,
+        iterations=0,
+        device="cpu",
+        dtype="float32",
+        implementation="torch",
+    )
+
+    with pytest.raises(RuntimeError, match="shape values must be positive"):
+        validate_config(invalid_shape)
+    with pytest.raises(RuntimeError, match="iterations must be positive"):
+        validate_config(invalid_iterations)
