@@ -26,6 +26,15 @@ def command_output(command: list[str]) -> str | None:
     return completed.stdout.strip()
 
 
+def command_info(command: str, version_args: list[str]) -> dict[str, str | None]:
+    path = shutil.which(command)
+    version_text = command_output([command, *version_args]) if path else None
+    return {
+        "path": path,
+        "version": version_text.splitlines()[0] if version_text else None,
+    }
+
+
 def torch_info() -> dict[str, object]:
     try:
         import torch
@@ -79,6 +88,10 @@ def main() -> None:
         "triton": package_version("triton"),
         "nvidia_smi": nvidia_smi,
         "driver": driver,
+        "profilers": {
+            "ncu": command_info("ncu", ["--version"]),
+            "nsys": command_info("nsys", ["--version"]),
+        },
         "cmake": cmake,
     }
     print(json.dumps(info, indent=2, sort_keys=True))

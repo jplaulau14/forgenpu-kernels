@@ -65,6 +65,21 @@ uv sync --extra dev
 
 PyTorch is a project dependency. On a CUDA Linux machine, verify that the resolved PyTorch build matches the target CUDA runtime before trusting GPU benchmark results.
 
+GPU profiling tools are system dependencies, not Python packages. `ncu` usually comes from the CUDA toolkit. `nsys` comes from Nsight Systems and may be missing from rented GPU images. Check both with:
+
+```bash
+make env
+make profile-check
+```
+
+If `nsys` is missing on an Ubuntu-based GPU container and you have root or sudo access, install the Nsight Systems CLI with:
+
+```bash
+make install-nsight-systems
+```
+
+This helper installs `nsight-systems-cli` when available, falling back to NVIDIA's devtools apt repository. If the provider blocks package installation, choose an image with Nsight Systems preinstalled or rely on the PyTorch profiler fallback.
+
 ## Quick Start
 
 Run the local CPU validation path:
@@ -185,7 +200,10 @@ make test
 make bench-matmul
 make bench-matmul-table
 make bench-matmul-gpu
+make install-nsight-systems
+make profile-check
 make profile-matmul
+make profile-matmul-nsys
 make build-cpp
 ```
 

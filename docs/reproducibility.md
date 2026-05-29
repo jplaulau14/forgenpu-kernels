@@ -43,9 +43,9 @@ git clone <repo-url>
 cd forgenpu-kernels
 uv sync --extra dev
 make env
+make profile-check
 make test
 make bench-matmul-gpu
-make profile-check
 make profile-matmul
 make build-cpp
 ```
@@ -76,7 +76,33 @@ The Nsight Compute path first runs a target smoke test without `ncu` and writes 
 
 `make profile-check` should report a `ninja` executable. PyTorch uses Ninja to build the CUDA extension at runtime. If `ninja` is missing after pulling new code, run `uv sync --extra dev` again before profiling.
 
-The Makefile does not install Nsight tools. Nsight Compute and Nsight Systems are NVIDIA system tools that depend on the GPU image, CUDA/toolkit installation, container permissions, and host driver configuration. The repo checks and uses them; the rented GPU image should provide them, or they should be installed through the provider's supported image/package flow.
+Nsight Compute and Nsight Systems are NVIDIA system tools that depend on the GPU image, CUDA/toolkit installation, container permissions, and host driver configuration. The repo checks and uses them; they are not Python dependencies.
+
+Your observed RunPod environment had:
+
+```text
+ncu: /usr/local/cuda/bin/ncu
+nsys: command not found
+```
+
+That means Nsight Compute is installed, but Nsight Systems is not. On an Ubuntu-based GPU container with root or sudo access, install the Nsight Systems CLI with:
+
+```bash
+make install-nsight-systems
+which nsys
+nsys --version
+make profile-check
+```
+
+The install helper first tries `apt-get install nsight-systems-cli`, then `nsight-systems`, and then adds NVIDIA's devtools apt repository if the package is not available from the image's current apt sources. NVIDIA documents `nsight-systems-cli` as the CLI-only package for Linux containers. If the provider blocks apt/package installation, choose an image with Nsight Systems preinstalled or rely on the PyTorch profiler fallback.
+
+To force an Nsight Systems capture after installation:
+
+```bash
+make profile-matmul-nsys
+```
+
+This target sets `PROFILE_TOOL=nsys` and fails if `nsys` is still unavailable or cannot produce a report. The default `make profile-matmul` target keeps `PROFILE_TOOL=auto`, which tries Nsight Compute first, then Nsight Systems, then the PyTorch profiler fallback.
 
 For M2, `make test` should run the CUDA matmul tests instead of skipping them.
 

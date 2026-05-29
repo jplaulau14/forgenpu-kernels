@@ -19,6 +19,7 @@ OUT_DIR="${OUT_DIR:-results/profiles}"
 NCU_TIMEOUT_SECONDS="${NCU_TIMEOUT_SECONDS:-120}"
 REQUIRE_NCU="${REQUIRE_NCU:-0}"
 PROFILE_PYTHON="${PROFILE_PYTHON:-}"
+PROFILE_TOOL="${PROFILE_TOOL:-auto}"
 
 mkdir -p "${OUT_DIR}"
 
@@ -115,7 +116,7 @@ check_environment() {
   log "Checking profiler environment"
   log "shape=${shape_label} out_dir=${OUT_DIR}"
   log "TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}"
-  log "REQUIRE_NCU=${REQUIRE_NCU} NCU_TIMEOUT_SECONDS=${NCU_TIMEOUT_SECONDS}"
+  log "PROFILE_TOOL=${PROFILE_TOOL} REQUIRE_NCU=${REQUIRE_NCU} NCU_TIMEOUT_SECONDS=${NCU_TIMEOUT_SECONDS}"
 
   print_tool_version nvidia-smi nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
   print_tool_version nvcc nvcc --version
@@ -194,6 +195,13 @@ run_fallback_profile_chain() {
   run_pytorch_profiler_fallback
 }
 
+case "${PROFILE_TOOL}" in
+  auto | ncu | nsys | torch) ;;
+  *)
+    die "PROFILE_TOOL must be one of: auto, ncu, nsys, torch"
+    ;;
+esac
+
 if [[ "${CHECK_ONLY}" == "1" ]]; then
   check_environment
   exit 0
@@ -213,7 +221,15 @@ uv run forgenpu-bench-matmul \
   --output "${benchmark_output}"
 log "Benchmark JSON: ${benchmark_output}"
 
-if command -v ncu >/dev/null 2>&1; then
+if [[ "${PROFILE_TOOL}" == "nsys" ]]; then
+  run_nsight_systems_profile || die "Nsight Systems profiling failed."
+elif [[ "${PROFILE_TOOL}" == "torch" ]]; then
+  run_pytorch_profiler_fallback
+elif [[ "${PROFILE_TOOL}" == "ncu" || "${PROFILE_TOOL}" == "auto" ]] && command -v ncu >/dev/null 2>&1; then
+  if [[ "${PROFILE_TOOL}" == "ncu" ]]; then
+    REQUIRE_NCU=1
+  fi
+
   profile_python="$(resolve_profile_python)"
   ensure_profile_python_bin_on_path "${profile_python}"
   log "Smoke-testing dedicated Nsight target before ncu"
@@ -260,14 +276,14 @@ if command -v ncu >/dev/null 2>&1; then
     fi
     run_fallback_profile_chain
   fi
-elif command -v nsys >/dev/null 2>&1; then
+elif [[ "${PROFILE_TOOL}" == "auto" ]] && command -v nsys >/dev/null 2>&1; then
   if [[ "${REQUIRE_NCU}" == "1" ]]; then
     die "ncu was not found and REQUIRE_NCU=1."
   fi
 
   run_nsight_systems_profile || run_pytorch_profiler_fallback
 else
-  if [[ "${REQUIRE_NCU}" == "1" ]]; then
+  if [[ "${REQUIRE_NCU}" == "1" || "${PROFILE_TOOL}" == "ncu" ]]; then
     die "ncu was not found and REQUIRE_NCU=1."
   fi
 

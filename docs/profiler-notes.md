@@ -12,6 +12,31 @@ Before running the full profile, check tool availability:
 make profile-check
 ```
 
+If `profile-check` reports `ncu` but `nsys: not found`, the CUDA toolkit includes Nsight Compute but the image is missing Nsight Systems. On Ubuntu-based GPU containers with root or sudo access, install the Nsight Systems CLI with:
+
+```bash
+make install-nsight-systems
+which nsys
+nsys --version
+```
+
+If package installation is blocked by the provider, use a GPU image with Nsight Systems preinstalled or let the script fall back to the PyTorch profiler.
+
+To test Nsight Systems directly:
+
+```bash
+make profile-matmul-nsys
+```
+
+This sets `PROFILE_TOOL=nsys` and requires an `.nsys-rep` capture. For manual runs, the accepted values are:
+
+```bash
+PROFILE_TOOL=auto scripts/profile_matmul.sh 1024 1024 1024
+PROFILE_TOOL=ncu scripts/profile_matmul.sh 1024 1024 1024
+PROFILE_TOOL=nsys scripts/profile_matmul.sh 1024 1024 1024
+PROFILE_TOOL=torch scripts/profile_matmul.sh 1024 1024 1024
+```
+
 When Nsight Compute evidence is required, use strict mode:
 
 ```bash
