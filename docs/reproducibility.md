@@ -2,14 +2,14 @@
 
 This document describes how to reproduce the project validation path locally or on a GPU instance.
 
-M2 includes naive and tiled FP32 CUDA matmul implementations. The GPU run proves that the project environment, PyTorch CUDA visibility, correctness tests, benchmark harness, profiler entry point, C++ bridge, and CUDA extension builds work on a CUDA-capable machine.
+M4 includes naive and tiled FP32 CUDA matmul implementations, a Triton FP32 matmul, and a WMMA FP16-input/FP32-output CUDA matmul. Generic CUDA validation proves the FP32 CUDA paths, benchmark harness, profiler entry point, C++ bridge, and CUDA extension builds. The M4 WMMA path needs a WMMA-capable GPU, and H100 timing claims require H100 benchmark evidence.
 
 ## Local CPU Validation
 
 From the repository root:
 
 ```bash
-uv sync --extra dev
+uv sync --extra dev --extra triton
 make quickstart
 make build-cpp
 ```
@@ -46,18 +46,20 @@ make env
 make profile-check
 make test
 make bench-matmul-gpu
+make bench-matmul-gpu-fp16
 make profile-matmul
 make build-cpp
 ```
 
-Run CUDA benchmarks from a repository checkout, editable install, or built package. M2 compiles `.cu` files at runtime through PyTorch extension loading; source checkouts use `kernels/cuda`, and built packages include the CUDA source files as package data.
+Run CUDA benchmarks from a repository checkout, editable install, or built package. CUDA paths compile `.cu` files at runtime through PyTorch extension loading; source checkouts use `kernels/cuda`, and built packages include the CUDA source files as package data.
 
 The GPU run should show:
 
 - an NVIDIA GPU in `nvidia-smi`,
 - `cuda_available: true` in `make env`,
 - a non-null PyTorch CUDA version compatible with the installed NVIDIA driver,
-- a benchmark table with `torch`, `cuda_naive`, and `cuda_tiled`,
+- an FP32 benchmark table with `torch`, `cuda_naive`, `cuda_tiled`, and `triton` when dependencies are available,
+- an FP16 benchmark table with `torch` and `cuda_wmma` when WMMA is available,
 - passing correctness tests,
 - profiler output or an explicit profiler fallback note,
 - successful C++ bridge build.
@@ -106,7 +108,7 @@ This target sets `PROFILE_TOOL=nsys` and fails if `nsys` is still unavailable or
 
 If `nsys` generates `.qdstrm` but reports that the importer binary or dependencies were not found, the run captured a raw Nsight Systems stream but did not produce the final `.nsys-rep` report. The script logs this as `PROFILE_RESULT=nsight_systems_raw_stream`. Treat it as partial profiler evidence and either install the full Nsight Systems package/importer dependencies or copy the `.qdstrm` to a machine with Nsight Systems for import.
 
-For M2, `make test` should run the CUDA matmul tests instead of skipping them.
+For M4, `make test` should run the CUDA matmul tests instead of skipping them on the GPU machine.
 
 ## Benchmark Capture
 
@@ -116,7 +118,7 @@ For a small smoke benchmark:
 uv run forgenpu-bench-matmul --shape 512 512 512 --warmup 5 --iterations 20
 ```
 
-For a larger M1-ready baseline:
+For a larger PyTorch baseline:
 
 ```bash
 uv run forgenpu-bench-matmul --shape 1024 1024 1024 --warmup 25 --iterations 100
@@ -139,6 +141,19 @@ For a human-readable RunPod check:
 uv run forgenpu-bench-matmul \
   --implementation all \
   --device cuda \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
+For the M4 FP16 WMMA check:
+
+```bash
+uv run forgenpu-bench-matmul \
+  --implementation all \
+  --device cuda \
+  --dtype float16 \
   --shape 1024 1024 1024 \
   --warmup 25 \
   --iterations 100 \
@@ -184,18 +199,21 @@ For hardware-counter profiling, prefer `PROFILE_RESULT=nsight_compute`.
 
 ## What Counts As Reproduced
 
-M2 is reproduced on GPU when the following command sequence succeeds:
+M4 is reproduced on GPU when the following command sequence succeeds:
 
 ```bash
-uv sync --extra dev
+uv sync --extra dev --extra triton
 make env
 make test
 uv run forgenpu-bench-matmul --implementation all --device cuda --shape 1024 1024 1024 --warmup 25 --iterations 100
+uv run forgenpu-bench-matmul --implementation all --device cuda --dtype float16 --shape 1024 1024 1024 --warmup 25 --iterations 100
 scripts/profile_matmul.sh 1024 1024 1024
 make build-cpp
 ```
 
-The environment output must show CUDA availability. The test output must include the CUDA matmul correctness tests, and the benchmark output must include `torch`, `cuda_naive`, and `cuda_tiled` records when `--implementation all --device cuda` is used. If CUDA is unavailable on the GPU instance, the issue is environment setup, not the M2 harness.
+The environment output must show CUDA availability. The test output must include the CUDA matmul correctness tests, and the benchmark output must include `torch`, `cuda_naive`, and `cuda_tiled` records for the FP32 run, `triton` when the optional dependency is installed and runnable, plus `torch` and `cuda_wmma` records for the FP16 run when the target device supports WMMA. If CUDA is unavailable on the GPU instance, the issue is environment setup, not the M4 harness.
+
+Use H100 benchmark runs for M4 WMMA latency and throughput claims. GTX 1660 Ti profiler runs are useful for the profiler workflow and FP32 `cuda_tiled` evidence, but they should not be presented as H100 or Tensor Core evidence.
 
 ## PyTorch And Driver Compatibility
 

@@ -10,37 +10,45 @@ Current behavior:
 - synchronize CUDA before and during event timing when CUDA is available,
 - use `torch.cuda.Event` on CUDA,
 - use `time.perf_counter_ns` on CPU,
-- report p50, p95, mean latency, correctness error, shape, dtype, and machine metadata.
+- report p50, p95, mean latency, correctness error, shape, input/accumulation/output dtype, and machine metadata.
 - expose a Typer CLI at `uv run forgenpu-bench-matmul`,
 - render interactive tables with Rich,
 - write progress logs to stderr so long CUDA extension builds and benchmark runs do not look stalled.
 
-M3 implementations:
+Current implementations:
 
 - `torch`: PyTorch baseline.
 - `cuda_naive`: one CUDA thread computes one output element.
 - `cuda_tiled`: one CUDA thread computes one output element while each block stages `16 x 16` input tiles in shared memory.
+- `cuda_wmma`: one warp computes one `16 x 16` output tile with WMMA using FP16 inputs and FP32 accumulation/output.
 - `triton`: one Triton program computes a `16 x 16` output tile with a blocked `tl.dot` loop over `K`.
-- `all`: run every implementation that appears runnable in the current environment. CPU runs include only `torch`; CUDA runs add the custom CUDA extensions and Triton only when their dependencies are available.
+- `all`: run every implementation that appears runnable for the requested dtype in the current environment. CPU runs include only `torch`; CUDA FP32 runs add the FP32 custom CUDA/Triton paths when available; CUDA FP16 runs add `cuda_wmma` when available.
 
 CPU results are for harness validation only. GPU performance conclusions require a CUDA-capable PyTorch environment.
 
 ## Correctness
 
-The custom CUDA and Triton matmul implementations are checked against `torch.matmul`.
+The custom CUDA and Triton matmul implementations are checked against `torch.matmul`. FP32 paths compare against a FP32 `torch.matmul` result. The FP16 WMMA path compares against a FP32 PyTorch oracle computed from `a.float()` and `b.float()`, because the custom kernel returns FP32 output after FP32 accumulation.
 
 Shape coverage includes:
 
 - square: `16 x 16 x 16`
 - rectangular: `31 x 47 x 19`
 - projection-like: `8 x 128 x 64`
-- non-tile-multiple M2 shape: `65 x 33 x 129`
+- non-tile-multiple FP32 shape: `65 x 33 x 129`
 
-The custom CUDA and Triton implementations are FP32-only. The test tolerance is intentionally modest because accumulation order can differ:
+The FP32 test tolerance is intentionally modest because accumulation order can differ:
 
 ```text
 rtol = 1e-4
 atol = 1e-4
+```
+
+The WMMA tests use looser FP16-input tolerances because input values are rounded to FP16 before multiplication:
+
+```text
+rtol = 2e-2
+atol = 2e-2
 ```
 
 ## Benchmark Metrics
@@ -54,10 +62,13 @@ Matmul benchmark records include:
 - `achieved_tflops`: estimated FLOPs divided by p50 runtime
 - `speedup_vs_baseline`: p50 speedup relative to `torch.matmul` when the same run includes a `torch` row
 - `speedup_vs_naive`: p50 speedup relative to `cuda_naive` when available
+- `input_dtype`, `accumulation_dtype`, and `output_dtype`: dtype metadata needed to read mixed-precision results correctly
 
-For `cuda_tiled` and `triton`, the estimated global-memory byte model uses the same tiled-read formula because both implementations operate on blocked input tiles. The memory estimates are explanatory, not hardware-counter measurements. Use profiler output when making bottleneck claims.
+For FP16-input runs, read speedups with the dtype columns. The `torch` row reports PyTorch's actual output dtype and implementation-defined accumulation behavior for the requested input dtype. The `cuda_wmma` row is explicitly FP16-input, FP32-accumulation, and FP32-output.
 
-## M3 Benchmark Commands
+For `cuda_tiled`, `triton`, and `cuda_wmma`, the estimated global-memory byte model uses a tiled-read formula because all three operate on blocked input tiles. The memory estimates are explanatory, not hardware-counter measurements, and the WMMA estimate does not include all padding/copy overhead from the host wrapper. Use profiler output when making bottleneck claims.
+
+## Benchmark Commands
 
 PyTorch baseline:
 
@@ -114,6 +125,19 @@ uv run forgenpu-bench-matmul \
   --iterations 20
 ```
 
+FP16-input WMMA comparison on a WMMA-capable CUDA machine:
+
+```bash
+uv run forgenpu-bench-matmul \
+  --implementation all \
+  --device cuda \
+  --dtype float16 \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
 Interactive table output:
 
 ```bash
@@ -159,7 +183,36 @@ uv run forgenpu-bench-matmul \
   --format table
 ```
 
-When recording results, include the GPU name, CUDA version, PyTorch version, Triton version, warmup count, iteration count, shape, dtype, and which implementations were included. If `cuda_naive`, `cuda_tiled`, or `triton` are absent from `--implementation all`, run that implementation explicitly to capture the unavailable reason.
+## M4 H100 Benchmark Artifact
+
+The M4 H100 FP16 benchmark artifact should be added after running `cuda_wmma` on the target H100 environment. Do not infer it from local CPU tests or from GTX 1660 Ti profiler runs.
+
+Suggested command sequence:
+
+```bash
+uv sync --extra dev --extra triton
+uv run --extra dev --extra triton pytest tests/test_matmul.py -k "wmma or torch"
+uv run forgenpu-bench-matmul \
+  --implementation all \
+  --device cuda \
+  --dtype float16 \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format json \
+  --quiet \
+  --output results/matmul_1024_m4_fp16.json
+uv run forgenpu-bench-matmul \
+  --implementation all \
+  --device cuda \
+  --dtype float16 \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
+When recording results, include the GPU name, CUDA version, PyTorch version, Triton version, warmup count, iteration count, shape, input/accumulation/output dtype, and which implementations were included. If a dtype-eligible implementation is absent from `--implementation all`, run that implementation explicitly to capture the unavailable reason: use FP32 commands for `cuda_naive`, `cuda_tiled`, and `triton`; use `--dtype float16` for `cuda_wmma`.
 
 ## Benchmark And Profiling Evidence Boundaries
 
@@ -183,7 +236,7 @@ If the profiler machine requires an explicit CUDA architecture, set `TORCH_CUDA_
 TORCH_CUDA_ARCH_LIST=<compute-capability> scripts/profile_matmul.sh 1024 1024 1024
 ```
 
-The profiler script currently profiles `cuda_tiled`, not the M3 Triton kernel. Use it as CUDA tiled evidence and use the benchmark commands above for Triton-vs-CUDA timing until a Triton-specific profiler target exists.
+The profiler script currently profiles `cuda_tiled`, not the M3 Triton kernel or the M4 WMMA kernel. Use it as CUDA tiled FP32 evidence and use the benchmark commands above for Triton-vs-CUDA and WMMA-vs-PyTorch timing. GTX 1660 Ti profiler artifacts should not be presented as H100 Tensor Core evidence.
 
 ## Reporting Standard
 

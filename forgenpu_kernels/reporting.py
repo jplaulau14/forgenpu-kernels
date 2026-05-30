@@ -36,6 +36,9 @@ def build_benchmark_table(rows: list[MatmulBenchmarkResult]) -> Table:
         title_style="bold cyan",
     )
     table.add_column("implementation")
+    table.add_column("input")
+    table.add_column("accum")
+    table.add_column("output")
     table.add_column("p50 ms", justify="right")
     table.add_column("p95 ms", justify="right")
     table.add_column("mean ms", justify="right")
@@ -48,6 +51,9 @@ def build_benchmark_table(rows: list[MatmulBenchmarkResult]) -> Table:
     for row in rows:
         table.add_row(
             str(row["implementation"]),
+            str(row.get("input_dtype", row.get("dtype", "-"))),
+            str(row.get("accumulation_dtype", "-")),
+            str(row.get("output_dtype", row.get("dtype", "-"))),
             format_float(row["p50_ms"]),
             format_float(row["p95_ms"]),
             format_float(row["mean_ms"]),
@@ -67,7 +73,7 @@ def format_benchmark_table(rows: list[MatmulBenchmarkResult]) -> str:
         file=buffer,
         force_terminal=False,
         highlight=False,
-        width=120,
+        width=140,
     )
     console.print(build_benchmark_table(rows))
     return buffer.getvalue().rstrip()

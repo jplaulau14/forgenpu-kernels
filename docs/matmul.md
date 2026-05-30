@@ -1,6 +1,6 @@
 # Matmul
 
-M1 added the first custom CUDA operator: naive FP32 matrix multiplication. M2 added a tiled shared-memory FP32 implementation so the repo can compare direct global-memory access against block-level data reuse. M3 adds a Triton FP32 matmul so the repo can compare CUDA C++ with a higher-level GPU kernel language.
+M1 added the first custom CUDA operator: naive FP32 matrix multiplication. M2 added a tiled shared-memory FP32 implementation so the repo can compare direct global-memory access against block-level data reuse. M3 added a Triton FP32 matmul so the repo can compare CUDA C++ with a higher-level GPU kernel language. M4 adds a WMMA Tensor Core path for FP16 inputs with FP32 accumulation/output.
 
 ## Implementations
 
@@ -73,6 +73,22 @@ Out-of-range tile loads are filled with zero, so non-multiple-of-16 shapes work 
 
 Triton still launches GPU work, but the programmer writes tile-level tensor operations instead of manually mapping every CUDA thread to one output element. The source-tree implementation mirror is `kernels/triton/matmul.py`; the importable implementation lives in `forgenpu_kernels/triton/matmul.py`.
 
+### `cuda_wmma`
+
+`cuda_wmma` is the M4 Tensor Core path:
+
+- input `A`: shape `[M, K]`
+- input `B`: shape `[K, N]`
+- output `C`: shape `[M, N]`
+- input dtype: `float16`
+- accumulation dtype: `float32`
+- output dtype: `float32`
+- tile shape: `16 x 16 x 16`
+- one warp computes one output tile
+- the wrapper pads non-multiple-of-16 shapes with zeros before launching the WMMA kernel
+
+The source lives in `kernels/cuda/matmul/matmul_wmma.cu` and the packaged mirror lives in `forgenpu_kernels/cuda/matmul/matmul_wmma.cu`.
+
 ## Why This Is Naive
 
 The M1 `cuda_naive` kernel reads directly from global memory for every multiply-add. It does not use:
@@ -97,7 +113,7 @@ For a `1024 x 1024 x 1024` FP32 matmul with tile size 16, the benchmark reports:
 - tiled estimated global-memory bytes: each output block reuses staged tiles across 256 output elements,
 - compulsory IO bytes: the lower-bound read/write volume for the two inputs and one output.
 
-This is still not a production matmul. The current custom matmul paths do not include:
+The FP32 custom matmul paths are still not production matmuls. They do not include:
 
 - register blocking,
 - vectorized loads,
@@ -120,7 +136,7 @@ The repo keeps both because they answer different questions:
 
 ## Expected Performance
 
-`cuda_naive` is expected to lose to `torch.matmul` on realistic GPU shapes. `cuda_tiled` should usually improve over `cuda_naive` on sufficiently large shapes. `triton` may improve readability, performance, or both relative to the simple CUDA kernels, but it should still be treated as a baseline Triton implementation rather than a production matmul. PyTorch routes matmul to highly optimized vendor kernels, while these kernels demonstrate:
+`cuda_naive` is expected to lose to `torch.matmul` on realistic GPU shapes. `cuda_tiled` should usually improve over `cuda_naive` on sufficiently large shapes. `triton` may improve readability, performance, or both relative to the simple CUDA kernels, but it should still be treated as a baseline Triton implementation rather than a production matmul. `cuda_wmma` should change the comparison from FP32 CUDA-core work to Tensor Core MMA work on supported devices, but it is still a simple pedagogical kernel. PyTorch routes matmul to highly optimized vendor kernels, while these kernels demonstrate:
 
 - CUDA launch integration,
 - row/column indexing,
@@ -128,9 +144,10 @@ The repo keeps both because they answer different questions:
 - correctness against PyTorch,
 - benchmark comparability,
 - the impact of shared-memory tiling,
-- CUDA-vs-Triton implementation ergonomics.
+- CUDA-vs-Triton implementation ergonomics,
+- the dtype/layout constraints that come with Tensor Core programming.
 
-Do not describe either custom CUDA implementation as production optimized.
+Do not describe any custom implementation in this repo as production optimized.
 
 ## M3 H100 Benchmark Result
 
@@ -144,6 +161,25 @@ The first committed M3 benchmark summary is `results/profiles/m3-h100-triton.md`
 - speed relative to `torch.matmul`: `0.365x`
 
 This is benchmark evidence only. It shows that the M3 Triton path is faster than the simple custom CUDA baselines for this run, but still far below the PyTorch vendor-kernel baseline. It does not include profiler counters for stall reasons, memory throughput, occupancy, or Tensor Core usage.
+
+## M4 Benchmark Evidence
+
+M4 adds the `cuda_wmma` implementation and benchmark surface. The H100 FP16 benchmark artifact is intentionally not inferred from local CPU tests or GTX 1660 Ti profiling. Add it only after running the FP16 benchmark on the target H100 environment.
+
+Suggested H100 command:
+
+```bash
+uv run forgenpu-bench-matmul \
+  --implementation all \
+  --device cuda \
+  --dtype float16 \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
+Profiler artifacts collected on a GTX 1660 Ti should be labeled as profiler workflow or FP32-kernel evidence for that device. They should not be used as Tensor Core performance evidence for H100.
 
 ## How To Run
 
@@ -171,10 +207,22 @@ Triton:
 uv run forgenpu-bench-matmul --implementation triton --device cuda
 ```
 
-All implementations:
+WMMA Tensor Core path:
+
+```bash
+uv run forgenpu-bench-matmul --implementation cuda_wmma --device cuda --dtype float16
+```
+
+FP32 implementations available in the current environment:
 
 ```bash
 uv run forgenpu-bench-matmul --implementation all --device cuda
+```
+
+FP16 implementations available in the current environment:
+
+```bash
+uv run forgenpu-bench-matmul --implementation all --device cuda --dtype float16
 ```
 
 Profiler capture:
@@ -185,13 +233,14 @@ scripts/profile_matmul.sh 1024 1024 1024
 
 ## Known Limits
 
-- FP32 only.
+- `cuda_naive`, `cuda_tiled`, and `triton` are FP32-only.
+- `cuda_wmma` is FP16-input and FP32-output only.
 - CUDA only for custom implementations.
 - CUDA implementations require PyTorch CUDA and nvcc.
 - Triton implementation requires PyTorch CUDA and Triton.
 - `cuda_naive` has no shared memory.
 - `cuda_tiled` has no register blocking or Tensor Core usage.
 - `triton` is a baseline blocked matmul, not an autotuned production schedule.
-- No Tensor Core usage.
+- `cuda_wmma` uses WMMA but not a production GEMM schedule.
 - No batching.
 - No transpose flags.

@@ -2,7 +2,7 @@
 
 ForgeNPU Kernels is a CUDA/C++ and Triton transformer inference kernel systems project. The long-term target is a set of custom kernels, correctness tests, reproducible benchmarks, profiler-backed performance notes, and a minimal decoder-block execution path.
 
-This repository is intentionally growing milestone by milestone. M0 established the project foundation, M1 added the first real custom CUDA kernel, M2 added a tiled shared-memory FP32 matmul, and M3 adds a Triton FP32 matmul for comparing CUDA C++ against a higher-level GPU kernel language.
+This repository is intentionally growing milestone by milestone. M0 established the project foundation, M1 added the first real custom CUDA kernel, M2 added a tiled shared-memory FP32 matmul, M3 added a Triton FP32 matmul, and M4 adds a WMMA Tensor Core matmul path for FP16 inputs with FP32 accumulation/output.
 
 ## Why This Exists
 
@@ -16,9 +16,9 @@ Framework kernels are already strong. The point of this project is not to preten
 
 Every performance claim in this repo should include a baseline, shape, machine context, timing method, and limitations.
 
-## Current Milestone: M3
+## Current Milestone: M4
 
-M3 includes:
+M4 includes:
 
 - project structure for CUDA, Triton, Python, tests, benchmarks, scripts, and docs,
 - an environment check script,
@@ -27,14 +27,16 @@ M3 includes:
 - a naive FP32 CUDA matmul kernel,
 - a tiled shared-memory FP32 CUDA matmul kernel,
 - a blocked FP32 Triton matmul kernel,
+- a WMMA Tensor Core CUDA matmul kernel for FP16 inputs and FP32 output,
 - Python binding through a PyTorch CUDA extension,
 - Triton correctness tests against `torch.matmul` when Triton and CUDA are available,
+- WMMA correctness tests against a FP32 PyTorch oracle when CUDA is available,
 - matmul correctness tests across square, rectangular, projection-like, and non-tile-multiple shapes,
-- benchmark selection for PyTorch, CUDA naive, CUDA tiled, Triton, or all implementations runnable in the current environment,
+- dtype-aware benchmark selection for PyTorch, CUDA naive, CUDA tiled, CUDA WMMA, Triton, or all implementations runnable in the current environment,
 - profiler capture script for matmul,
 - first roofline-style note explaining arithmetic intensity and memory traffic.
 
-The custom CUDA and Triton kernels are still intentionally simple. The CUDA kernels expose low-level thread/block and memory-control mechanics. Triton expresses the same blocked matmul idea with less launch and indexing boilerplate. PyTorch remains the production-grade baseline.
+The custom CUDA and Triton kernels are still intentionally simple. The CUDA kernels expose low-level thread/block, shared-memory, and WMMA mechanics. Triton expresses a blocked matmul idea with less launch and indexing boilerplate. PyTorch remains the production-grade baseline.
 
 ## Repository Layout
 
@@ -115,7 +117,7 @@ uv run forgenpu-bench-matmul \
   --format table
 ```
 
-Run the M3 GPU comparison on a CUDA machine:
+Run the FP32 GPU comparison on a CUDA machine:
 
 ```bash
 uv run forgenpu-bench-matmul \
@@ -150,7 +152,35 @@ uv run forgenpu-bench-matmul \
   --iterations 100 \
   --format json \
   --quiet \
-  --output results/matmul_1024_m3.json
+  --output results/matmul_1024_fp32.json
+```
+
+Run the M4 FP16 WMMA comparison on a CUDA machine with Tensor Core support:
+
+```bash
+uv run forgenpu-bench-matmul \
+  --implementation all \
+  --device cuda \
+  --dtype float16 \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
+Save the M4 FP16 result:
+
+```bash
+uv run forgenpu-bench-matmul \
+  --implementation all \
+  --device cuda \
+  --dtype float16 \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format json \
+  --quiet \
+  --output results/matmul_1024_m4_fp16.json
 ```
 
 The historical script path still works:
@@ -179,7 +209,7 @@ Run the PyTorch matmul benchmark:
 uv run forgenpu-bench-matmul --shape 512 512 512 --warmup 5 --iterations 20
 ```
 
-Run PyTorch, naive CUDA, tiled CUDA, and Triton matmul on a CUDA machine when all are available:
+Run the FP32 PyTorch, naive CUDA, tiled CUDA, and Triton comparison on a CUDA machine when all are available:
 
 ```bash
 uv run forgenpu-bench-matmul \
@@ -196,6 +226,19 @@ Use the table format for interactive runs:
 uv run forgenpu-bench-matmul \
   --implementation all \
   --device cuda \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
+Run the FP16-input PyTorch and WMMA comparison on a WMMA-capable CUDA machine:
+
+```bash
+uv run forgenpu-bench-matmul \
+  --implementation all \
+  --device cuda \
+  --dtype float16 \
   --shape 1024 1024 1024 \
   --warmup 25 \
   --iterations 100 \
@@ -220,6 +263,7 @@ make test
 make bench-matmul
 make bench-matmul-table
 make bench-matmul-gpu
+make bench-matmul-gpu-fp16
 make install-nsight-systems
 make profile-check
 make profile-matmul
@@ -227,7 +271,9 @@ make profile-matmul-nsys
 make build-cpp
 ```
 
-`make profile-matmul` profiles the CUDA tiled path. It is still useful CUDA evidence during M3, but it is not a Triton profiler target.
+`make profile-matmul` profiles the CUDA tiled FP32 path. Profiler artifacts from a GTX 1660 Ti are useful for validating profiler workflow and FP32-kernel behavior in this project, but they should not be used as H100 Tensor Core performance evidence.
+
+The FP16-input benchmark is not an identical output-dtype contract across rows. The `torch` row reports PyTorch's actual output dtype for the requested input dtype, while `cuda_wmma` intentionally returns FP32 after FP32 accumulation. Use the input, accumulation, and output dtype columns when reading speedups.
 
 For a GPU-backed reproducibility run, see [docs/reproducibility.md](docs/reproducibility.md).
 
@@ -239,22 +285,23 @@ The matmul benchmark uses:
 
 - warmup iterations before timing,
 - `torch.cuda.Event` timing on CUDA tensors,
-- `time.perf_counter` timing on CPU tensors,
+- `time.perf_counter_ns` timing on CPU tensors,
 - synchronization around measured regions,
 - p50, p95, and mean latency,
 - machine and software metadata in the JSON output.
 
-M3 supports:
+M4 supports:
 
 - `--implementation torch`
 - `--implementation cuda_naive`
 - `--implementation cuda_tiled`
+- `--implementation cuda_wmma`
 - `--implementation triton`
 - `--implementation all`
 - `--format json` for scripts and saved artifacts
 - `--format table` for interactive reading
 
-The custom CUDA and Triton implementations only support FP32 CUDA tensors. `--implementation all` includes custom CUDA extensions and Triton only when those paths appear runnable in the current environment. Benchmark records include estimated FLOPs, achieved TFLOP/s, compulsory IO bytes, and an estimated global-memory byte count for custom kernels.
+The FP32 custom CUDA and Triton implementations support CUDA `float32` tensors. The M4 WMMA implementation supports CUDA `float16` inputs and returns `float32` output. `--implementation all` is dtype-aware: FP32 runs include the FP32 CUDA/Triton paths when available, while FP16 runs include `torch` and `cuda_wmma` when available. Benchmark records include input, accumulation, and output dtype fields, estimated FLOPs, achieved TFLOP/s, compulsory IO bytes, and an estimated global-memory byte count for custom kernels.
 
 ## Documentation Format
 
@@ -262,15 +309,17 @@ This nested repository is public code documentation, so Markdown files intention
 
 ## Roadmap
 
-- M4: Tensor Core matmul path with dtype and layout notes.
 - M5-M10: normalization, softmax, RoPE, KV cache, attention, FlashAttention-style attention, and decoder-block integration.
 
 ## Known Limits
 
-- The custom CUDA matmul implementations are FP32-only.
+- `cuda_naive` and `cuda_tiled` are FP32-only.
+- `cuda_wmma` is FP16-input and FP32-output only.
 - The Triton matmul implementation is FP32-only.
 - The CUDA matmul implementations require a CUDA-capable PyTorch environment and nvcc.
+- The WMMA path requires NVIDIA WMMA support on compute capability 7.0 or newer; performance claims should be collected on the target benchmark GPU.
 - The Triton matmul implementation requires a CUDA-capable PyTorch environment and the optional Triton dependency.
 - CUDA benchmark runs compile `.cu` files at runtime through PyTorch extension loading. Source checkouts use `kernels/cuda`; packaged installs use CUDA source files included as package data.
 - The tiled kernel uses shared-memory tiling, but no register blocking, Tensor Cores, vectorized loads, or layout transforms.
+- The WMMA kernel is intentionally pedagogical: it uses one warp per output tile and explicit host-side padding rather than a production GEMM schedule.
 - CPU benchmark output is useful for harness validation, not GPU-kernel conclusions.

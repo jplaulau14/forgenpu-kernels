@@ -42,6 +42,12 @@ MATMUL_TILED = CudaExtensionSpec(
     function_name="matmul_tiled",
     label="Tiled matmul",
 )
+MATMUL_WMMA = CudaExtensionSpec(
+    name="forgenpu_matmul_wmma",
+    source_filename="matmul_wmma.cu",
+    function_name="matmul_wmma",
+    label="WMMA Tensor Core matmul",
+)
 
 
 def _kernel_source(spec: CudaExtensionSpec) -> Path:
@@ -79,6 +85,19 @@ def _missing_ninja_message(kernel: str) -> str:
     )
 
 
+def _unsupported_device_message(spec: CudaExtensionSpec, torch, device=None) -> str | None:
+    if spec != MATMUL_WMMA:
+        return None
+
+    major, minor = torch.cuda.get_device_capability(device)
+    if major < 7:
+        return (
+            f"{spec.label} requires NVIDIA WMMA support on compute capability 7.0 or newer; "
+            f"visible CUDA device is sm_{major}{minor}."
+        )
+    return None
+
+
 def _matmul_naive_source() -> Path:
     return _kernel_source(MATMUL_NAIVE)
 
@@ -87,11 +106,15 @@ def _matmul_tiled_source() -> Path:
     return _kernel_source(MATMUL_TILED)
 
 
-def _has_cuda_extension(spec: CudaExtensionSpec) -> bool:
-    return cuda_extension_unavailable_reason(spec) is None
+def _matmul_wmma_source() -> Path:
+    return _kernel_source(MATMUL_WMMA)
 
 
-def cuda_extension_unavailable_reason(spec: CudaExtensionSpec) -> str | None:
+def _has_cuda_extension(spec: CudaExtensionSpec, *, device=None) -> bool:
+    return cuda_extension_unavailable_reason(spec, device=device) is None
+
+
+def cuda_extension_unavailable_reason(spec: CudaExtensionSpec, *, device=None) -> str | None:
     try:
         torch = _require_torch()
         from torch.utils.cpp_extension import CUDA_HOME
@@ -102,6 +125,9 @@ def cuda_extension_unavailable_reason(spec: CudaExtensionSpec) -> str | None:
 
     if not torch.cuda.is_available():
         return f"{spec.label} requires a CUDA-capable PyTorch environment."
+    unsupported_device = _unsupported_device_message(spec, torch, device)
+    if unsupported_device is not None:
+        return unsupported_device
     if CUDA_HOME is None:
         return f"{spec.label} requires a CUDA toolkit with nvcc available."
     source = _kernel_source(spec)
@@ -118,24 +144,34 @@ def cuda_extension_unavailable_reason(spec: CudaExtensionSpec) -> str | None:
     return None
 
 
-def has_cuda_matmul_naive() -> bool:
+def has_cuda_matmul_naive(*, device=None) -> bool:
     """Return whether the current environment can build and run the M1 CUDA matmul."""
-    return _has_cuda_extension(MATMUL_NAIVE)
+    return _has_cuda_extension(MATMUL_NAIVE, device=device)
 
 
-def has_cuda_matmul_tiled() -> bool:
+def has_cuda_matmul_tiled(*, device=None) -> bool:
     """Return whether the current environment can build and run the M2 CUDA matmul."""
-    return _has_cuda_extension(MATMUL_TILED)
+    return _has_cuda_extension(MATMUL_TILED, device=device)
 
 
-def cuda_matmul_naive_unavailable_reason() -> str | None:
+def has_cuda_matmul_wmma(*, device=None) -> bool:
+    """Return whether the current environment can build and run the M4 WMMA matmul."""
+    return _has_cuda_extension(MATMUL_WMMA, device=device)
+
+
+def cuda_matmul_naive_unavailable_reason(*, device=None) -> str | None:
     """Return why the M1 CUDA matmul is unavailable, or None when it is available."""
-    return cuda_extension_unavailable_reason(MATMUL_NAIVE)
+    return cuda_extension_unavailable_reason(MATMUL_NAIVE, device=device)
 
 
-def cuda_matmul_tiled_unavailable_reason() -> str | None:
+def cuda_matmul_tiled_unavailable_reason(*, device=None) -> str | None:
     """Return why the M2 CUDA matmul is unavailable, or None when it is available."""
-    return cuda_extension_unavailable_reason(MATMUL_TILED)
+    return cuda_extension_unavailable_reason(MATMUL_TILED, device=device)
+
+
+def cuda_matmul_wmma_unavailable_reason(*, device=None) -> str | None:
+    """Return why the M4 WMMA matmul is unavailable, or None when it is available."""
+    return cuda_extension_unavailable_reason(MATMUL_WMMA, device=device)
 
 
 @lru_cache(maxsize=None)
@@ -143,7 +179,6 @@ def _load_cuda_extension(spec: CudaExtensionSpec) -> Any:
     torch = _require_torch()
     if not torch.cuda.is_available():
         raise RuntimeError(f"{spec.label} requires a CUDA-capable PyTorch environment.")
-
     from torch.utils.cpp_extension import CUDA_HOME, load
 
     if CUDA_HOME is None:
@@ -174,7 +209,14 @@ def _load_cuda_extension(spec: CudaExtensionSpec) -> Any:
 
 
 def _run_cuda_extension(spec: CudaExtensionSpec, a, b):
-    return getattr(_load_cuda_extension(spec), spec.function_name)(a, b)
+    module = _load_cuda_extension(spec)
+    if spec == MATMUL_WMMA:
+        torch = _require_torch()
+        if isinstance(a, torch.Tensor):
+            unsupported_device = _unsupported_device_message(spec, torch, a.device)
+            if unsupported_device is not None:
+                raise RuntimeError(unsupported_device)
+    return getattr(module, spec.function_name)(a, b)
 
 
 def cuda_matmul_naive(a, b):
@@ -185,3 +227,8 @@ def cuda_matmul_naive(a, b):
 def cuda_matmul_tiled(a, b):
     """Run the M2 tiled shared-memory FP32 CUDA matmul kernel."""
     return _run_cuda_extension(MATMUL_TILED, a, b)
+
+
+def cuda_matmul_wmma(a, b):
+    """Run the M4 WMMA FP16-input FP32-output CUDA matmul kernel."""
+    return _run_cuda_extension(MATMUL_WMMA, a, b)

@@ -8,12 +8,16 @@ import forgenpu_kernels
 from forgenpu_kernels.bindings import (
     MATMUL_NAIVE,
     MATMUL_TILED,
+    MATMUL_WMMA,
     cuda_matmul_naive_unavailable_reason,
     cuda_matmul_tiled_unavailable_reason,
+    cuda_matmul_wmma_unavailable_reason,
     cuda_matmul_naive,
     cuda_matmul_tiled,
+    cuda_matmul_wmma,
     has_cuda_matmul_naive,
     has_cuda_matmul_tiled,
+    has_cuda_matmul_wmma,
     _kernel_source,
 )
 from forgenpu_kernels.triton import has_triton_matmul, triton_matmul_unavailable_reason
@@ -22,13 +26,14 @@ from forgenpu_kernels.triton import has_triton_matmul, triton_matmul_unavailable
 def test_cuda_matmul_bridge_reports_boolean_availability() -> None:
     assert isinstance(has_cuda_matmul_naive(), bool)
     assert isinstance(has_cuda_matmul_tiled(), bool)
+    assert isinstance(has_cuda_matmul_wmma(), bool)
     assert isinstance(has_triton_matmul(), bool)
 
 
 def test_packaged_cuda_sources_stay_in_sync_with_source_tree() -> None:
     repo_root = Path(forgenpu_kernels.__file__).resolve().parents[1]
 
-    for spec in (MATMUL_NAIVE, MATMUL_TILED):
+    for spec in (MATMUL_NAIVE, MATMUL_TILED, MATMUL_WMMA):
         source_tree_file = repo_root / "kernels" / "cuda" / "matmul" / spec.source_filename
         packaged_file = repo_root / "forgenpu_kernels" / "cuda" / "matmul" / spec.source_filename
 
@@ -58,6 +63,17 @@ def test_cuda_matmul_tiled_explains_missing_cuda_environment() -> None:
 
     with pytest.raises(RuntimeError, match="requires"):
         cuda_matmul_tiled(None, None)
+
+
+def test_cuda_matmul_wmma_explains_missing_cuda_environment() -> None:
+    if has_cuda_matmul_wmma():
+        pytest.skip("CUDA WMMA matmul is available in this environment")
+
+    reason = cuda_matmul_wmma_unavailable_reason()
+    assert reason
+
+    with pytest.raises(RuntimeError, match="requires"):
+        cuda_matmul_wmma(None, None)
 
 
 def test_triton_matmul_explains_missing_environment() -> None:

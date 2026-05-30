@@ -11,6 +11,9 @@ def test_format_table_includes_key_benchmark_columns() -> None:
     rows = [
         {
             "implementation": "torch",
+            "input_dtype": "float32",
+            "accumulation_dtype": "float32",
+            "output_dtype": "float32",
             "p50_ms": 0.0682239979505539,
             "p95_ms": 0.07234879955649376,
             "mean_ms": 0.0688441601395607,
@@ -22,6 +25,9 @@ def test_format_table_includes_key_benchmark_columns() -> None:
         },
         {
             "implementation": "cuda_tiled",
+            "input_dtype": "float32",
+            "accumulation_dtype": "float32",
+            "output_dtype": "float32",
             "p50_ms": 0.2807680070400238,
             "p95_ms": 0.2825647920370102,
             "mean_ms": 0.2809456020593643,
@@ -36,6 +42,8 @@ def test_format_table_includes_key_benchmark_columns() -> None:
     table = format_benchmark_table(rows)
 
     assert "implementation" in table
+    assert "input" in table
+    assert "output" in table
     assert "TFLOP/s" in table
     assert "vs torch" in table
     assert "vs naive" in table
@@ -59,6 +67,7 @@ def test_typer_cli_help_is_direct_command() -> None:
     assert "[OPTIONS]" in completed.stdout
     assert "COMMAND [ARGS]" not in completed.stdout
     assert "--implementation" in completed.stdout
+    assert "cuda_wmma" in completed.stdout
     assert "--format" in completed.stdout
 
 
@@ -127,6 +136,9 @@ def test_typer_cli_json_smoke_has_stable_schema() -> None:
     assert payload["operator"] == "matmul"
     assert payload["implementation"] == "torch"
     assert payload["dtype"] == "float32"
+    assert payload["input_dtype"] == "float32"
+    assert payload["accumulation_dtype"] == "float32"
+    assert payload["output_dtype"] == "float32"
     assert payload["shape"] == {"m": 8, "n": 8, "k": 8}
     assert payload["warmup"] == 0
     assert payload["iterations"] == 1

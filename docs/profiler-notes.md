@@ -87,7 +87,9 @@ Every profiler artifact should be paired with a benchmark run on the same device
 
 Do not use hardware-counter evidence from one GPU to make definitive claims about timings collected on another GPU. Cross-device comparisons are useful for learning, but they should be labeled as hypotheses unless benchmark and profiler evidence were collected on the same hardware.
 
-During M3, `scripts/profile_matmul.sh` still profiles `cuda_tiled`, not the Triton kernel. Triton performance claims should therefore cite benchmark artifacts such as `results/profiles/m3-h100-triton.md` until a Triton-specific profiler target exists.
+As of M4, `scripts/profile_matmul.sh` still profiles `cuda_tiled`, not the Triton kernel or the WMMA kernel. Triton and WMMA performance claims should therefore cite benchmark artifacts, such as `results/profiles/m3-h100-triton.md` for M3 and the future H100 FP16 WMMA artifact for M4, until dedicated profiler targets exist.
+
+When profiler artifacts are collected on a GTX 1660 Ti, treat them as profiler workflow evidence or FP32 `cuda_tiled` evidence for that specific device. Do not use them as H100 timing evidence or Tensor Core evidence.
 
 ## M2 Expected Bottleneck
 

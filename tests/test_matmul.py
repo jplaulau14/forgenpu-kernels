@@ -7,8 +7,10 @@ torch = pytest.importorskip("torch")
 from forgenpu_kernels.bindings import (  # noqa: E402
     cuda_matmul_naive,
     cuda_matmul_tiled,
+    cuda_matmul_wmma,
     has_cuda_matmul_naive,
     has_cuda_matmul_tiled,
+    has_cuda_matmul_wmma,
 )
 from forgenpu_kernels.ops import max_error, torch_matmul  # noqa: E402
 from forgenpu_kernels.triton import has_triton_matmul, triton_matmul  # noqa: E402
@@ -138,6 +140,60 @@ def test_cuda_matmul_tiled_matches_empty_pytorch_output(m: int, n: int, k: int) 
 
     torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
     assert tuple(actual.shape) == (m, n)
+
+
+@pytest.mark.skipif(
+    not has_cuda_matmul_wmma(), reason="CUDA WMMA extension toolchain is unavailable"
+)
+@pytest.mark.parametrize(
+    ("m", "n", "k"),
+    [
+        (16, 16, 16),
+        (64, 64, 64),
+        (31, 47, 19),
+        (8, 128, 64),
+    ],
+)
+def test_cuda_matmul_wmma_matches_pytorch_float32_oracle(m: int, n: int, k: int) -> None:
+    generator = torch.Generator(device="cuda")
+    generator.manual_seed(0)
+    a = torch.randn((m, k), device="cuda", dtype=torch.float16, generator=generator)
+    b = torch.randn((k, n), device="cuda", dtype=torch.float16, generator=generator)
+
+    actual = cuda_matmul_wmma(a, b)
+    expected = torch.matmul(a.float(), b.float())
+    errors = max_error(actual, expected)
+
+    assert actual.dtype == torch.float32
+    torch.testing.assert_close(actual, expected, rtol=2e-2, atol=2e-2)
+    assert errors.max_abs_error < 5e-2
+
+
+@pytest.mark.skipif(
+    not has_cuda_matmul_wmma(), reason="CUDA WMMA extension toolchain is unavailable"
+)
+@pytest.mark.parametrize(("m", "n", "k"), [(0, 16, 8), (16, 0, 8)])
+def test_cuda_matmul_wmma_matches_empty_pytorch_output(m: int, n: int, k: int) -> None:
+    a = torch.empty((m, k), device="cuda", dtype=torch.float16)
+    b = torch.empty((k, n), device="cuda", dtype=torch.float16)
+
+    actual = cuda_matmul_wmma(a, b)
+    expected = torch.matmul(a.float(), b.float())
+
+    torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+    assert actual.dtype == torch.float32
+    assert tuple(actual.shape) == (m, n)
+
+
+@pytest.mark.skipif(
+    not has_cuda_matmul_wmma(), reason="CUDA WMMA extension toolchain is unavailable"
+)
+def test_cuda_matmul_wmma_rejects_float32_inputs() -> None:
+    a = torch.empty((16, 16), device="cuda", dtype=torch.float32)
+    b = torch.empty((16, 16), device="cuda", dtype=torch.float32)
+
+    with pytest.raises(RuntimeError, match="float16"):
+        cuda_matmul_wmma(a, b)
 
 
 @pytest.mark.skipif(not has_triton_matmul(), reason="Triton CUDA environment is unavailable")

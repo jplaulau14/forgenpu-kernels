@@ -8,12 +8,15 @@ from typing import Any, Callable, Literal, TypedDict
 
 from forgenpu_kernels.benchmarks import benchmark_torch_callable, machine_info_dict
 from forgenpu_kernels.bindings import (
-    cuda_matmul_naive_unavailable_reason,
-    cuda_matmul_tiled_unavailable_reason,
     cuda_matmul_naive,
+    cuda_matmul_naive_unavailable_reason,
     cuda_matmul_tiled,
+    cuda_matmul_tiled_unavailable_reason,
+    cuda_matmul_wmma,
+    cuda_matmul_wmma_unavailable_reason,
     has_cuda_matmul_naive,
     has_cuda_matmul_tiled,
+    has_cuda_matmul_wmma,
 )
 from forgenpu_kernels.ops import max_error, torch_matmul
 from forgenpu_kernels.triton import (
@@ -22,13 +25,16 @@ from forgenpu_kernels.triton import (
     triton_matmul_unavailable_reason,
 )
 
-MatmulImplementation = Literal["torch", "cuda_naive", "cuda_tiled", "triton"]
-MatmulImplementationSelection = Literal["torch", "cuda_naive", "cuda_tiled", "triton", "all"]
+MatmulImplementation = Literal["torch", "cuda_naive", "cuda_tiled", "cuda_wmma", "triton"]
+MatmulImplementationSelection = Literal[
+    "torch", "cuda_naive", "cuda_tiled", "cuda_wmma", "triton", "all"
+]
 
 MATMUL_CUDA_IMPLEMENTATIONS: tuple[MatmulImplementation, ...] = (
     "cuda_naive",
     "cuda_tiled",
 )
+MATMUL_CUDA_TENSOR_CORE_IMPLEMENTATIONS: tuple[MatmulImplementation, ...] = ("cuda_wmma",)
 MATMUL_TRITON_IMPLEMENTATIONS: tuple[MatmulImplementation, ...] = ("triton",)
 TILE_SIZE = 16
 
@@ -61,6 +67,9 @@ class MatmulBenchmarkResult(MatmulWorkloadMetrics):
     operator: str
     implementation: MatmulImplementation
     dtype: str
+    input_dtype: str
+    accumulation_dtype: str
+    output_dtype: str
     shape: ShapeRecord
     warmup: int
     iterations: int
@@ -137,22 +146,63 @@ def make_inputs(torch, *, m: int, n: int, k: int, device: str, dtype):
     return a, b
 
 
+def torch_matmul_oracle(a, b, *, dtype_name: str):
+    """Return the correctness oracle for the configured dtype."""
+    if dtype_name in {"float16", "bfloat16"}:
+        return torch_matmul(a.float(), b.float())
+    return torch_matmul(a, b)
+
+
+def torch_dtype_name(torch, dtype) -> str:
+    if dtype == torch.float32:
+        return "float32"
+    if dtype == torch.float16:
+        return "float16"
+    if dtype == torch.bfloat16:
+        return "bfloat16"
+    return str(dtype).replace("torch.", "")
+
+
+def accumulation_dtype_name(implementation: MatmulImplementation, dtype_name: str) -> str:
+    if implementation == "cuda_wmma":
+        return "float32"
+    if dtype_name == "float32":
+        return "float32"
+    return "implementation_defined"
+
+
 def matmul_workload_metrics(
-    *, implementation: str, shape: tuple[int, int, int], p50_ms: float, dtype_name: str = "float32"
+    *,
+    implementation: str,
+    shape: tuple[int, int, int],
+    p50_ms: float,
+    dtype_name: str = "float32",
+    output_dtype_name: str | None = None,
 ) -> MatmulWorkloadMetrics:
     m, n, k = shape
     element_bytes = dtype_element_size(dtype_name)
+    output_element_bytes = dtype_element_size(output_dtype_name or dtype_name)
     flops = 2 * m * n * k
-    compulsory_io_bytes = element_bytes * ((m * k) + (k * n) + (m * n))
+    compulsory_io_bytes = element_bytes * ((m * k) + (k * n)) + output_element_bytes * (m * n)
     tile_m = ceil_div(m, TILE_SIZE)
     tile_n = ceil_div(n, TILE_SIZE)
+    tile_k = ceil_div(k, TILE_SIZE)
 
     if implementation == "cuda_naive":
-        estimated_global_memory_bytes = element_bytes * ((2 * m * n * k) + (m * n))
+        estimated_global_memory_bytes = element_bytes * (2 * m * n * k) + output_element_bytes * (
+            m * n
+        )
     elif implementation in {"cuda_tiled", "triton"}:
         estimated_global_memory_bytes = element_bytes * (
-            ((tile_n * m * k) + (tile_m * k * n)) + (m * n)
-        )
+            (tile_n * m * k) + (tile_m * k * n)
+        ) + output_element_bytes * (m * n)
+    elif implementation == "cuda_wmma":
+        m_padded = tile_m * TILE_SIZE
+        n_padded = tile_n * TILE_SIZE
+        k_padded = tile_k * TILE_SIZE
+        estimated_global_memory_bytes = element_bytes * (
+            (tile_n * m_padded * k_padded) + (tile_m * k_padded * n_padded)
+        ) + output_element_bytes * (m_padded * n_padded)
     else:
         estimated_global_memory_bytes = None
 
@@ -186,19 +236,25 @@ def selected_implementations(
     selection: MatmulImplementationSelection,
     *,
     device: str | None = None,
+    dtype_name: str = "float32",
 ) -> tuple[MatmulImplementation, ...]:
     if selection == "all":
         implementations: list[MatmulImplementation] = ["torch"]
         if device is not None and not device.startswith("cuda"):
             return tuple(implementations)
-        for implementation in MATMUL_CUDA_IMPLEMENTATIONS:
-            if implementation == "cuda_naive" and has_cuda_matmul_naive():
-                implementations.append(implementation)
-            if implementation == "cuda_tiled" and has_cuda_matmul_tiled():
-                implementations.append(implementation)
-        for implementation in MATMUL_TRITON_IMPLEMENTATIONS:
-            if implementation == "triton" and has_triton_matmul():
-                implementations.append(implementation)
+        if dtype_name == "float32":
+            for implementation in MATMUL_CUDA_IMPLEMENTATIONS:
+                if implementation == "cuda_naive" and has_cuda_matmul_naive(device=device):
+                    implementations.append(implementation)
+                if implementation == "cuda_tiled" and has_cuda_matmul_tiled(device=device):
+                    implementations.append(implementation)
+            for implementation in MATMUL_TRITON_IMPLEMENTATIONS:
+                if implementation == "triton" and has_triton_matmul():
+                    implementations.append(implementation)
+        elif dtype_name == "float16":
+            for implementation in MATMUL_CUDA_TENSOR_CORE_IMPLEMENTATIONS:
+                if implementation == "cuda_wmma" and has_cuda_matmul_wmma(device=device):
+                    implementations.append(implementation)
         return tuple(implementations)
     return (selection,)
 
@@ -209,17 +265,23 @@ def validate_implementation(
     if implementation == "torch":
         return
 
-    if dtype_name != "float32":
-        raise RuntimeError(f"{implementation} only supports float32")
     if not device.startswith("cuda"):
         raise RuntimeError(f"{implementation} requires --device cuda or CUDA-capable --device auto")
 
-    if implementation == "cuda_naive" and not has_cuda_matmul_naive():
-        reason = cuda_matmul_naive_unavailable_reason()
+    if implementation in {"cuda_naive", "cuda_tiled", "triton"} and dtype_name != "float32":
+        raise RuntimeError(f"{implementation} only supports float32")
+    if implementation == "cuda_wmma" and dtype_name != "float16":
+        raise RuntimeError("cuda_wmma only supports float16 inputs")
+
+    if implementation == "cuda_naive" and not has_cuda_matmul_naive(device=device):
+        reason = cuda_matmul_naive_unavailable_reason(device=device)
         raise RuntimeError(f"cuda_naive is unavailable: {reason}")
-    if implementation == "cuda_tiled" and not has_cuda_matmul_tiled():
-        reason = cuda_matmul_tiled_unavailable_reason()
+    if implementation == "cuda_tiled" and not has_cuda_matmul_tiled(device=device):
+        reason = cuda_matmul_tiled_unavailable_reason(device=device)
         raise RuntimeError(f"cuda_tiled is unavailable: {reason}")
+    if implementation == "cuda_wmma" and not has_cuda_matmul_wmma(device=device):
+        reason = cuda_matmul_wmma_unavailable_reason(device=device)
+        raise RuntimeError(f"cuda_wmma is unavailable: {reason}")
     if implementation == "triton" and not has_triton_matmul():
         reason = triton_matmul_unavailable_reason()
         raise RuntimeError(f"triton is unavailable: {reason}")
@@ -232,6 +294,8 @@ def run_implementation(implementation: MatmulImplementation, a, b):
         return cuda_matmul_naive(a, b)
     if implementation == "cuda_tiled":
         return cuda_matmul_tiled(a, b)
+    if implementation == "cuda_wmma":
+        return cuda_matmul_wmma(a, b)
     if implementation == "triton":
         return triton_matmul(a, b)
     raise ValueError(f"unknown implementation: {implementation}")
@@ -254,6 +318,8 @@ def benchmark_one(
     benchmark_target = partial(run_implementation, implementation, a, b)
     actual = benchmark_target()
     errors = max_error(actual, expected)
+    torch = require_torch()
+    output_dtype_name = torch_dtype_name(torch, actual.dtype)
     timing = benchmark_torch_callable(
         benchmark_target,
         warmup=warmup,
@@ -267,6 +333,9 @@ def benchmark_one(
         "operator": "matmul",
         "implementation": implementation,
         "dtype": dtype_name,
+        "input_dtype": dtype_name,
+        "accumulation_dtype": accumulation_dtype_name(implementation, dtype_name),
+        "output_dtype": output_dtype_name,
         "shape": {"m": m, "n": n, "k": k},
         "warmup": warmup,
         "iterations": iterations,
@@ -283,6 +352,7 @@ def benchmark_one(
             shape=shape,
             p50_ms=timing["p50_ms"],
             dtype_name=dtype_name,
+            output_dtype_name=output_dtype_name,
         ),
     }
     return result
@@ -344,10 +414,12 @@ def run_matmul_benchmark(
     emit(progress, "creating deterministic inputs")
     a, b = make_inputs(torch, m=m, n=n, k=k, device=device, dtype=dtype)
     emit(progress, "computing torch.matmul correctness oracle")
-    expected = torch.matmul(a, b)
+    expected = torch_matmul_oracle(a, b, dtype_name=config.dtype)
 
     results: list[MatmulBenchmarkResult] = []
-    for implementation in selected_implementations(config.implementation, device=device):
+    for implementation in selected_implementations(
+        config.implementation, device=device, dtype_name=config.dtype
+    ):
         emit(
             progress,
             f"running {implementation} warmup={config.warmup} iterations={config.iterations}",

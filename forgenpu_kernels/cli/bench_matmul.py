@@ -19,12 +19,6 @@ from forgenpu_kernels.matmul_benchmark import (
 from forgenpu_kernels.reporting import write_benchmark_result
 
 
-class Device(str, Enum):
-    auto = "auto"
-    cpu = "cpu"
-    cuda = "cuda"
-
-
 class DType(str, Enum):
     float32 = "float32"
     float16 = "float16"
@@ -35,6 +29,7 @@ class Implementation(str, Enum):
     torch = "torch"
     cuda_naive = "cuda_naive"
     cuda_tiled = "cuda_tiled"
+    cuda_wmma = "cuda_wmma"
     triton = "triton"
     all = "all"
 
@@ -65,7 +60,10 @@ def benchmark(
     ] = (512, 512, 512),
     warmup: Annotated[int, typer.Option(help="Warmup iterations before timing.")] = 25,
     iterations: Annotated[int, typer.Option(help="Timed benchmark iterations.")] = 100,
-    device: Annotated[Device, typer.Option(help="Execution device.")] = Device.auto,
+    device: Annotated[
+        str,
+        typer.Option(help="Execution device: auto, cpu, cuda, or cuda:<index>."),
+    ] = "auto",
     dtype: Annotated[DType, typer.Option(help="Tensor dtype.")] = DType.float32,
     implementation: Annotated[
         Implementation,
@@ -83,7 +81,7 @@ def benchmark(
         shape=shape,
         warmup=warmup,
         iterations=iterations,
-        device=device.value,
+        device=device,
         dtype=dtype.value,
         implementation=implementation.value,
     )
