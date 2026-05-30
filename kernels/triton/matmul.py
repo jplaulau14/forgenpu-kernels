@@ -4,10 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
+try:
+    import triton
+    import triton.language as tl
+except ImportError as exc:
+    triton = None
+    tl = None
+    _TRITON_IMPORT_ERROR = exc
+else:
+    _TRITON_IMPORT_ERROR = None
+
 BLOCK_M = 16
 BLOCK_N = 16
 BLOCK_K = 32
-_KERNEL = None
 
 
 def _require_torch():
@@ -21,14 +30,11 @@ def _require_torch():
 
 
 def _require_triton() -> tuple[Any, Any]:
-    try:
-        import triton
-        import triton.language as tl
-    except ImportError as exc:
+    if triton is None or tl is None:
         raise RuntimeError(
             "Triton matmul requires the optional Triton dependency. "
             "Install it with `uv sync --extra triton --extra dev` on Linux."
-        ) from exc
+        ) from _TRITON_IMPORT_ERROR
     return triton, tl
 
 
@@ -85,8 +91,10 @@ def triton_matmul(a, b):
         return c
 
     grid = (triton.cdiv(m, BLOCK_M), triton.cdiv(n, BLOCK_N))
-    kernel = _matmul_kernel()
-    kernel[grid](
+    if _matmul_kernel is None:
+        raise RuntimeError("Triton matmul kernel was not initialized")
+
+    _matmul_kernel[grid](
         a,
         b,
         c,
@@ -106,15 +114,10 @@ def triton_matmul(a, b):
     return c
 
 
-def _matmul_kernel():
-    global _KERNEL
-    if _KERNEL is not None:
-        return _KERNEL
-
-    triton, tl = _require_triton()
+if triton is not None and tl is not None:
 
     @triton.jit
-    def kernel(
+    def _matmul_kernel(
         a_ptr,
         b_ptr,
         c_ptr,
@@ -152,6 +155,5 @@ def _matmul_kernel():
         c_offsets = offsets_m[:, None] * stride_cm + offsets_n[None, :] * stride_cn
         c_mask = (offsets_m[:, None] < m) & (offsets_n[None, :] < n)
         tl.store(c_ptr + c_offsets, accumulator, mask=c_mask)
-
-    _KERNEL = kernel
-    return _KERNEL
+else:
+    _matmul_kernel = None
