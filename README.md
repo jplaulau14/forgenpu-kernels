@@ -231,6 +231,10 @@ M2 supports:
 
 The CUDA implementations only support FP32 CUDA tensors. Benchmark records include estimated FLOPs, achieved TFLOP/s, compulsory IO bytes, and an estimated global-memory byte count for custom kernels.
 
+## Documentation Format
+
+This nested repository is public code documentation, so Markdown files intentionally use normal GitHub Markdown instead of Obsidian YAML frontmatter. Private learning notes, concept traces, and journal entries live outside this package under `_private-specs/forgenpu-kernels/`.
+
 ## Roadmap
 
 - M3: Triton matmul and CUDA-vs-Triton ergonomics note.
@@ -241,6 +245,6 @@ The CUDA implementations only support FP32 CUDA tensors. Benchmark records inclu
 
 - The custom CUDA matmul implementations are FP32-only.
 - The CUDA matmul implementations require a CUDA-capable PyTorch environment and nvcc.
-- CUDA benchmark runs currently expect a source-tree checkout or editable install because the PyTorch extension loader compiles `.cu` files from `kernels/cuda`.
+- CUDA benchmark runs compile `.cu` files at runtime through PyTorch extension loading. Source checkouts use `kernels/cuda`; packaged installs use CUDA source files included as package data.
 - The tiled kernel uses shared-memory tiling, but no register blocking, Tensor Cores, vectorized loads, or layout transforms.
 - CPU benchmark output is useful for harness validation, not GPU-kernel conclusions.

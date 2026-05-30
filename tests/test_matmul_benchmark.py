@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import pytest
 
+import forgenpu_kernels.matmul_benchmark as matmul_benchmark
 from forgenpu_kernels.matmul_benchmark import (
     MatmulBenchmarkConfig,
     matmul_workload_metrics,
     result_payload,
+    resolve_device,
     selected_implementations,
     validate_config,
 )
@@ -69,3 +71,18 @@ def test_validate_config_rejects_non_positive_shape_and_iterations() -> None:
         validate_config(invalid_shape)
     with pytest.raises(RuntimeError, match="iterations must be positive"):
         validate_config(invalid_iterations)
+
+
+def test_resolve_device_rejects_explicit_cuda_when_pytorch_cuda_is_unavailable(monkeypatch) -> None:
+    class FakeCuda:
+        @staticmethod
+        def is_available() -> bool:
+            return False
+
+    class FakeTorch:
+        cuda = FakeCuda()
+
+    monkeypatch.setattr(matmul_benchmark, "require_torch", lambda: FakeTorch)
+
+    with pytest.raises(RuntimeError, match="PyTorch CUDA is not available"):
+        resolve_device("cuda")

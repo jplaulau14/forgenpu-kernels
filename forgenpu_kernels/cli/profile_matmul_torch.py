@@ -10,8 +10,12 @@ from forgenpu_kernels.bindings import cuda_matmul_tiled
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Profile the tiled CUDA matmul with PyTorch profiler.")
-    parser.add_argument("--shape", nargs=3, type=int, metavar=("M", "N", "K"), default=[1024, 1024, 1024])
+    parser = argparse.ArgumentParser(
+        description="Profile the tiled CUDA matmul with PyTorch profiler."
+    )
+    parser.add_argument(
+        "--shape", nargs=3, type=int, metavar=("M", "N", "K"), default=[1024, 1024, 1024]
+    )
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--output-dir", type=Path, default=Path("results/profiles"))
@@ -52,7 +56,9 @@ def main() -> None:
     torch.cuda.synchronize()
 
     log("capturing PyTorch profiler trace")
-    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+    with profile(
+        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True
+    ) as prof:
         for _ in range(args.iterations):
             cuda_matmul_tiled(a, b)
         torch.cuda.synchronize()

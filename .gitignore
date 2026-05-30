@@ -22,6 +22,11 @@ dist/
 results/**/*.json
 results/**/*.jsonl
 results/**/*.csv
+results/**/*.log
+results/**/*.txt
+results/**/*.utf8
+results/**/*.qdstrm
+results/**/*.trace.json
 results/**/*.nsys-rep
 results/**/*.ncu-rep
 results/**/*.sqlite

@@ -45,14 +45,19 @@ MATMUL_TILED = CudaExtensionSpec(
 
 
 def _kernel_source(spec: CudaExtensionSpec) -> Path:
-    return Path(__file__).resolve().parents[1] / "kernels" / "cuda" / "matmul" / spec.source_filename
+    source_tree_path = (
+        Path(__file__).resolve().parents[1] / "kernels" / "cuda" / "matmul" / spec.source_filename
+    )
+    if source_tree_path.exists():
+        return source_tree_path
+    return Path(__file__).resolve().parent / "cuda" / "matmul" / spec.source_filename
 
 
 def _missing_source_message(kernel: str, source: Path) -> str:
     return (
         f"{kernel} CUDA source not found: {source}. "
-        "The current extension loader expects a source-tree checkout with kernels/cuda present; "
-        "use the repository directly or an editable install for CUDA benchmark runs."
+        "Expected CUDA sources either in the repository kernels/cuda tree or in the installed "
+        "forgenpu_kernels package data."
     )
 
 

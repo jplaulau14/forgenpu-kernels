@@ -85,6 +85,18 @@ def resolve_device(requested: str) -> str:
     torch = require_torch()
     if requested == "auto":
         return "cuda" if torch.cuda.is_available() else "cpu"
+    if requested.startswith("cuda"):
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "--device cuda was requested, but PyTorch CUDA is not available. "
+                "Run `make env` to inspect the installed PyTorch build and visible GPU."
+            )
+        device = torch.device(requested)
+        if device.index is not None and device.index >= torch.cuda.device_count():
+            raise RuntimeError(
+                f"--device {requested} was requested, but only "
+                f"{torch.cuda.device_count()} CUDA device(s) are visible."
+            )
     return requested
 
 
@@ -161,13 +173,15 @@ def selected_implementations(
     return (selection,)
 
 
-def validate_implementation(*, implementation: MatmulImplementation, dtype_name: str, device: str) -> None:
+def validate_implementation(
+    *, implementation: MatmulImplementation, dtype_name: str, device: str
+) -> None:
     if implementation == "torch":
         return
 
     if dtype_name != "float32":
         raise RuntimeError(f"{implementation} only supports float32")
-    if device != "cuda":
+    if not device.startswith("cuda"):
         raise RuntimeError(f"{implementation} requires --device cuda or CUDA-capable --device auto")
 
     if implementation == "cuda_naive" and not has_cuda_matmul_naive():
@@ -248,7 +262,9 @@ def add_speedups(results: list[MatmulBenchmarkResult]) -> list[MatmulBenchmarkRe
     return results
 
 
-def p50_for_implementation(results: list[MatmulBenchmarkResult], implementation: str) -> float | None:
+def p50_for_implementation(
+    results: list[MatmulBenchmarkResult], implementation: str
+) -> float | None:
     return next(
         (result["p50_ms"] for result in results if result["implementation"] == implementation),
         None,
@@ -285,7 +301,10 @@ def run_matmul_benchmark(
     validate_dtype_for_device(device=device, dtype=dtype, dtype_name=config.dtype)
 
     m, n, k = config.shape
-    emit(progress, f"device={device} dtype={config.dtype} shape={m}x{n}x{k} implementation={config.implementation}")
+    emit(
+        progress,
+        f"device={device} dtype={config.dtype} shape={m}x{n}x{k} implementation={config.implementation}",
+    )
     emit(progress, "creating deterministic inputs")
     a, b = make_inputs(torch, m=m, n=n, k=k, device=device, dtype=dtype)
     emit(progress, "computing torch.matmul correctness oracle")
@@ -293,7 +312,10 @@ def run_matmul_benchmark(
 
     results: list[MatmulBenchmarkResult] = []
     for implementation in selected_implementations(config.implementation):
-        emit(progress, f"running {implementation} warmup={config.warmup} iterations={config.iterations}")
+        emit(
+            progress,
+            f"running {implementation} warmup={config.warmup} iterations={config.iterations}",
+        )
         results.append(
             benchmark_one(
                 implementation=implementation,

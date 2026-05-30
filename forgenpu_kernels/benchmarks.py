@@ -46,9 +46,13 @@ def package_version(package: str) -> str | None:
 
 
 def current_commit() -> str | None:
+    repo_root = Path(__file__).resolve().parents[1]
+    if not (repo_root / ".git").exists():
+        return None
+
     try:
         completed = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
+            ["git", "-C", str(repo_root), "rev-parse", "--short", "HEAD"],
             check=True,
             capture_output=True,
             text=True,

@@ -50,7 +50,7 @@ make profile-matmul
 make build-cpp
 ```
 
-Run CUDA benchmarks from a repository checkout or editable install. M2 compiles `.cu` files from `kernels/cuda` through PyTorch extension loading; wheel-style packaging of those CUDA sources is not part of the current milestone.
+Run CUDA benchmarks from a repository checkout, editable install, or built package. M2 compiles `.cu` files at runtime through PyTorch extension loading; source checkouts use `kernels/cuda`, and built packages include the CUDA source files as package data.
 
 The GPU run should show:
 

@@ -10,7 +10,9 @@ from forgenpu_kernels.bindings import cuda_matmul_tiled
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run only the tiled CUDA matmul for ncu.")
-    parser.add_argument("--shape", nargs=3, type=int, metavar=("M", "N", "K"), default=[1024, 1024, 1024])
+    parser.add_argument(
+        "--shape", nargs=3, type=int, metavar=("M", "N", "K"), default=[1024, 1024, 1024]
+    )
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--iterations", type=int, default=10)
     parser.add_argument(

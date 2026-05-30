@@ -1,10 +1,12 @@
-.PHONY: help quickstart env test lint bench-matmul bench-matmul-table bench-matmul-gpu install-nsight-systems profile-check profile-matmul profile-matmul-ncu profile-matmul-ncu-win profile-matmul-nsys configure-cpp build-cpp clean
+.PHONY: help quickstart env test lint format format-check bench-matmul bench-matmul-table bench-matmul-gpu install-nsight-systems profile-check profile-matmul profile-matmul-ncu profile-matmul-ncu-win profile-matmul-nsys configure-cpp build-cpp clean
 
 help:
 	@echo "ForgeNPU quick commands"
 	@echo "  make quickstart        - run env, lint, tests, and a CPU table benchmark"
 	@echo "  make env               - print Python/PyTorch/CUDA environment facts"
-	@echo "  make lint              - run ruff"
+	@echo "  make lint              - run ruff checks and format check"
+	@echo "  make format            - format Python files with ruff"
+	@echo "  make format-check      - verify Python formatting with ruff"
 	@echo "  make test              - run pytest"
 	@echo "  make bench-matmul      - run a JSON CPU/PyTorch matmul benchmark"
 	@echo "  make bench-matmul-table - run a readable CPU/PyTorch matmul benchmark"
@@ -23,6 +25,13 @@ env:
 
 lint:
 	uv run --extra dev ruff check .
+	uv run --extra dev ruff format --check .
+
+format:
+	uv run --extra dev ruff format .
+
+format-check:
+	uv run --extra dev ruff format --check .
 
 test:
 	uv run --extra dev pytest
