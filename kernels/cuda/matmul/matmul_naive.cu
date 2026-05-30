@@ -54,6 +54,9 @@ torch::Tensor matmul_naive(torch::Tensor a, torch::Tensor b) {
   const int64_t n = b.size(1);
 
   auto c = torch::empty({m, n}, a.options());
+  if (m == 0 || n == 0) {
+    return c;
+  }
 
   const dim3 block(kBlockSize, kBlockSize);
   const dim3 grid(

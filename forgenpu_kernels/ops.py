@@ -38,9 +38,10 @@ def max_error(actual, expected, *, eps: float = 1e-12) -> ErrorStats:
             f"shape mismatch: actual={tuple(actual.shape)} expected={tuple(expected.shape)}"
         )
 
-    diff = (actual - expected).abs()
+    diff = (actual - expected).abs().to(torch.float32)
     denom = torch.maximum(
-        expected.abs(), torch.tensor(eps, device=expected.device, dtype=expected.dtype)
+        expected.abs().to(torch.float32),
+        torch.tensor(eps, device=expected.device, dtype=torch.float32),
     )
     rel = diff / denom
     return ErrorStats(max_abs_error=float(diff.max().item()), max_rel_error=float(rel.max().item()))

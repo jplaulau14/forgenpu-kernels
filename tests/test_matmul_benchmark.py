@@ -5,6 +5,7 @@ import pytest
 import forgenpu_kernels.matmul_benchmark as matmul_benchmark
 from forgenpu_kernels.matmul_benchmark import (
     MatmulBenchmarkConfig,
+    dtype_element_size,
     matmul_workload_metrics,
     result_payload,
     resolve_device,
@@ -29,6 +30,29 @@ def test_matmul_workload_metrics_estimates_naive_and_tiled_global_bytes() -> Non
     assert tiled["estimated_global_memory_bytes"] == 541_065_216
     assert torch["estimated_global_memory_bytes"] is None
     assert tiled["estimated_global_memory_bytes"] < naive["estimated_global_memory_bytes"]
+
+
+def test_matmul_workload_metrics_uses_dtype_element_size() -> None:
+    shape = (1024, 1024, 1024)
+
+    fp32 = matmul_workload_metrics(
+        implementation="torch", shape=shape, p50_ms=1.0, dtype_name="float32"
+    )
+    fp16 = matmul_workload_metrics(
+        implementation="torch", shape=shape, p50_ms=1.0, dtype_name="float16"
+    )
+    bf16 = matmul_workload_metrics(
+        implementation="torch", shape=shape, p50_ms=1.0, dtype_name="bfloat16"
+    )
+
+    assert dtype_element_size("float32") == 4
+    assert dtype_element_size("float16") == 2
+    assert dtype_element_size("bfloat16") == 2
+    assert fp16["compulsory_io_bytes"] == fp32["compulsory_io_bytes"] // 2
+    assert bf16["compulsory_io_bytes"] == fp16["compulsory_io_bytes"]
+    assert fp16["arithmetic_intensity_flop_per_byte"] == (
+        2 * fp32["arithmetic_intensity_flop_per_byte"]
+    )
 
 
 def test_result_payload_unwraps_single_result_only() -> None:

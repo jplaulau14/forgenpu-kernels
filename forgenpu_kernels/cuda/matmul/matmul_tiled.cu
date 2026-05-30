@@ -69,6 +69,9 @@ torch::Tensor matmul_tiled(torch::Tensor a, torch::Tensor b) {
   const int64_t n = b.size(1);
 
   auto c = torch::empty({m, n}, a.options());
+  if (m == 0 || n == 0) {
+    return c;
+  }
 
   const dim3 block(kTileSize, kTileSize);
   const dim3 grid(

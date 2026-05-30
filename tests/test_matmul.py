@@ -36,6 +36,16 @@ def test_torch_matmul_reference_matches_pytorch(m: int, n: int, k: int) -> None:
     assert errors.max_rel_error == 0.0
 
 
+def test_max_error_handles_identical_zero_float16_tensors() -> None:
+    actual = torch.zeros((4, 4), dtype=torch.float16)
+    expected = torch.zeros((4, 4), dtype=torch.float16)
+
+    errors = max_error(actual, expected)
+
+    assert errors.max_abs_error == 0.0
+    assert errors.max_rel_error == 0.0
+
+
 @pytest.mark.skipif(not has_cuda_matmul_naive(), reason="CUDA extension toolchain is unavailable")
 @pytest.mark.parametrize(
     ("m", "n", "k"),
@@ -57,6 +67,19 @@ def test_cuda_matmul_naive_matches_pytorch(m: int, n: int, k: int) -> None:
 
     torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
     assert errors.max_abs_error < 1e-3
+
+
+@pytest.mark.skipif(not has_cuda_matmul_naive(), reason="CUDA extension toolchain is unavailable")
+@pytest.mark.parametrize(("m", "n", "k"), [(0, 16, 8), (16, 0, 8)])
+def test_cuda_matmul_naive_matches_empty_pytorch_output(m: int, n: int, k: int) -> None:
+    a = torch.empty((m, k), device="cuda", dtype=torch.float32)
+    b = torch.empty((k, n), device="cuda", dtype=torch.float32)
+
+    actual = cuda_matmul_naive(a, b)
+    expected = torch.matmul(a, b)
+
+    torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+    assert tuple(actual.shape) == (m, n)
 
 
 @pytest.mark.skipif(not has_cuda_matmul_tiled(), reason="CUDA extension toolchain is unavailable")
@@ -81,3 +104,16 @@ def test_cuda_matmul_tiled_matches_pytorch(m: int, n: int, k: int) -> None:
 
     torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
     assert errors.max_abs_error < 1e-3
+
+
+@pytest.mark.skipif(not has_cuda_matmul_tiled(), reason="CUDA extension toolchain is unavailable")
+@pytest.mark.parametrize(("m", "n", "k"), [(0, 16, 8), (16, 0, 8)])
+def test_cuda_matmul_tiled_matches_empty_pytorch_output(m: int, n: int, k: int) -> None:
+    a = torch.empty((m, k), device="cuda", dtype=torch.float32)
+    b = torch.empty((k, n), device="cuda", dtype=torch.float32)
+
+    actual = cuda_matmul_tiled(a, b)
+    expected = torch.matmul(a, b)
+
+    torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+    assert tuple(actual.shape) == (m, n)

@@ -133,18 +133,21 @@ def make_inputs(torch, *, m: int, n: int, k: int, device: str, dtype):
 
 
 def matmul_workload_metrics(
-    *, implementation: str, shape: tuple[int, int, int], p50_ms: float
+    *, implementation: str, shape: tuple[int, int, int], p50_ms: float, dtype_name: str = "float32"
 ) -> MatmulWorkloadMetrics:
     m, n, k = shape
+    element_bytes = dtype_element_size(dtype_name)
     flops = 2 * m * n * k
-    compulsory_io_bytes = 4 * ((m * k) + (k * n) + (m * n))
+    compulsory_io_bytes = element_bytes * ((m * k) + (k * n) + (m * n))
     tile_m = ceil_div(m, TILE_SIZE)
     tile_n = ceil_div(n, TILE_SIZE)
 
     if implementation == "cuda_naive":
-        estimated_global_memory_bytes = 4 * ((2 * m * n * k) + (m * n))
+        estimated_global_memory_bytes = element_bytes * ((2 * m * n * k) + (m * n))
     elif implementation == "cuda_tiled":
-        estimated_global_memory_bytes = 4 * (((tile_n * m * k) + (tile_m * k * n)) + (m * n))
+        estimated_global_memory_bytes = element_bytes * (
+            ((tile_n * m * k) + (tile_m * k * n)) + (m * n)
+        )
     else:
         estimated_global_memory_bytes = None
 
@@ -159,6 +162,15 @@ def matmul_workload_metrics(
         "arithmetic_intensity_flop_per_byte": arithmetic_intensity,
         "achieved_tflops": achieved_tflops,
     }
+
+
+def dtype_element_size(dtype_name: str) -> int:
+    sizes = {
+        "float32": 4,
+        "float16": 2,
+        "bfloat16": 2,
+    }
+    return sizes[dtype_name]
 
 
 def ceil_div(value: int, divisor: int) -> int:
@@ -247,6 +259,7 @@ def benchmark_one(
             implementation=implementation,
             shape=shape,
             p50_ms=timing["p50_ms"],
+            dtype_name=dtype_name,
         ),
     }
     return result
