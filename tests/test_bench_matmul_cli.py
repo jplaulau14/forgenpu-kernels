@@ -55,7 +55,8 @@ def test_typer_cli_help_is_direct_command() -> None:
         text=True,
     )
 
-    assert "Usage: forgenpu-bench-matmul [OPTIONS]" in completed.stdout
+    assert "Usage: forgenpu-bench-matmul" in completed.stdout
+    assert "[OPTIONS]" in completed.stdout
     assert "COMMAND [ARGS]" not in completed.stdout
     assert "--implementation" in completed.stdout
     assert "--format" in completed.stdout

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -59,6 +60,12 @@ def _ninja_available() -> bool:
     return shutil.which("ninja") is not None
 
 
+def _host_compiler_available() -> bool:
+    if sys.platform == "win32":
+        return shutil.which("cl") is not None
+    return True
+
+
 def _missing_ninja_message(kernel: str) -> str:
     return (
         f"{kernel} requires ninja to build PyTorch C++/CUDA extensions. "
@@ -84,7 +91,13 @@ def _has_cuda_extension(spec: CudaExtensionSpec) -> bool:
     except ImportError:
         return False
 
-    return bool(torch.cuda.is_available() and CUDA_HOME and _kernel_source(spec).exists() and _ninja_available())
+    return bool(
+        torch.cuda.is_available()
+        and CUDA_HOME
+        and _kernel_source(spec).exists()
+        and _ninja_available()
+        and _host_compiler_available()
+    )
 
 
 def has_cuda_matmul_naive() -> bool:
@@ -110,6 +123,13 @@ def _load_cuda_extension(spec: CudaExtensionSpec) -> Any:
 
     if not _ninja_available():
         raise RuntimeError(_missing_ninja_message(spec.label))
+
+    if not _host_compiler_available():
+        raise RuntimeError(
+            f"{spec.label} requires the MSVC C++ compiler `cl` on Windows. "
+            "Install Visual Studio Build Tools with the C++ workload, then run from a "
+            "Developer PowerShell or Developer Command Prompt."
+        )
 
     source = _kernel_source(spec)
     if not source.exists():
