@@ -25,8 +25,32 @@ function Require-Command {
   }
 }
 
+function Resolve-NcuPath {
+  $command = Get-Command "ncu" -ErrorAction SilentlyContinue
+  if ($command) {
+    return $command.Source
+  }
+
+  $searchRoots = @(
+    "C:\Program Files\NVIDIA Corporation",
+    "C:\Program Files\NVIDIA GPU Computing Toolkit"
+  )
+
+  foreach ($root in $searchRoots) {
+    if (Test-Path $root) {
+      $candidate = Get-ChildItem $root -Recurse -Filter "ncu.exe" -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+      if ($candidate) {
+        return $candidate.FullName
+      }
+    }
+  }
+
+  throw "Nsight Compute CLI not found. Install Nsight Compute or add the directory containing ncu.exe to PATH."
+}
+
 Require-Command "uv"
-Require-Command "ncu"
+$ncuPath = Resolve-NcuPath
 
 if (-not $env:TORCH_CUDA_ARCH_LIST) {
   $env:TORCH_CUDA_ARCH_LIST = $ArchList
@@ -39,6 +63,7 @@ $outputBase = Join-Path $OutputDir "matmul_${Implementation}_${shapeLabel}_ncu"
 
 Log-Step "device=cuda shape=$shapeLabel implementation=$Implementation"
 Log-Step "TORCH_CUDA_ARCH_LIST=$env:TORCH_CUDA_ARCH_LIST"
+Log-Step "ncu=$ncuPath"
 Log-Step "checking PyTorch CUDA"
 uv run python -c "import torch; print(f'torch={torch.__version__} torch_cuda={torch.version.cuda} cuda_available={torch.cuda.is_available()} device={torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}')"
 
@@ -52,7 +77,7 @@ uv run forgenpu-bench-matmul `
   --quiet
 
 Log-Step "running Nsight Compute"
-ncu `
+& $ncuPath `
   --target-processes all `
   --kernel-name $KernelName `
   --launch-count 1 `
