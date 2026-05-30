@@ -16,11 +16,13 @@ from forgenpu_kernels.bindings import (
     has_cuda_matmul_tiled,
     _kernel_source,
 )
+from forgenpu_kernels.triton import has_triton_matmul, triton_matmul_unavailable_reason
 
 
 def test_cuda_matmul_bridge_reports_boolean_availability() -> None:
     assert isinstance(has_cuda_matmul_naive(), bool)
     assert isinstance(has_cuda_matmul_tiled(), bool)
+    assert isinstance(has_triton_matmul(), bool)
 
 
 def test_packaged_cuda_sources_stay_in_sync_with_source_tree() -> None:
@@ -56,3 +58,18 @@ def test_cuda_matmul_tiled_explains_missing_cuda_environment() -> None:
 
     with pytest.raises(RuntimeError, match="requires"):
         cuda_matmul_tiled(None, None)
+
+
+def test_triton_matmul_explains_missing_environment() -> None:
+    if has_triton_matmul():
+        pytest.skip("Triton matmul is available in this environment")
+
+    assert triton_matmul_unavailable_reason()
+
+
+def test_packaged_triton_source_stays_in_sync_with_source_tree() -> None:
+    repo_root = Path(forgenpu_kernels.__file__).resolve().parents[1]
+    source_tree_file = repo_root / "kernels" / "triton" / "matmul.py"
+    packaged_file = repo_root / "forgenpu_kernels" / "triton" / "matmul.py"
+
+    assert source_tree_file.read_text(encoding="utf-8") == packaged_file.read_text(encoding="utf-8")

@@ -2,7 +2,7 @@
 
 ForgeNPU Kernels is a CUDA/C++ and Triton transformer inference kernel systems project. The long-term target is a set of custom kernels, correctness tests, reproducible benchmarks, profiler-backed performance notes, and a minimal decoder-block execution path.
 
-This repository is intentionally growing milestone by milestone. M0 established the project foundation, M1 added the first real custom CUDA kernel, and M2 adds a tiled shared-memory FP32 matmul for comparing global-memory reuse against the naive baseline.
+This repository is intentionally growing milestone by milestone. M0 established the project foundation, M1 added the first real custom CUDA kernel, M2 added a tiled shared-memory FP32 matmul, and M3 adds a Triton FP32 matmul for comparing CUDA C++ against a higher-level GPU kernel language.
 
 ## Why This Exists
 
@@ -16,9 +16,9 @@ Framework kernels are already strong. The point of this project is not to preten
 
 Every performance claim in this repo should include a baseline, shape, machine context, timing method, and limitations.
 
-## Current Milestone: M2
+## Current Milestone: M3
 
-M2 includes:
+M3 includes:
 
 - project structure for CUDA, Triton, Python, tests, benchmarks, scripts, and docs,
 - an environment check script,
@@ -26,13 +26,15 @@ M2 includes:
 - PyTorch reference operators,
 - a naive FP32 CUDA matmul kernel,
 - a tiled shared-memory FP32 CUDA matmul kernel,
+- a blocked FP32 Triton matmul kernel,
 - Python binding through a PyTorch CUDA extension,
-- matmul correctness tests across square, rectangular, and projection-like shapes,
-- benchmark selection for PyTorch, CUDA naive, CUDA tiled, or all implementations,
+- Triton correctness tests against `torch.matmul` when Triton and CUDA are available,
+- matmul correctness tests across square, rectangular, projection-like, and non-tile-multiple shapes,
+- benchmark selection for PyTorch, CUDA naive, CUDA tiled, Triton, or all implementations runnable in the current environment,
 - profiler capture script for matmul,
 - first roofline-style note explaining arithmetic intensity and memory traffic.
 
-The tiled CUDA kernel is still intentionally simple. It is expected to improve over the naive kernel on meaningful GPU shapes, but it is not expected to beat PyTorch. Its purpose is to prove shared-memory tiling, benchmark discipline, and profiler-backed interpretation before Tensor Core work.
+The custom CUDA and Triton kernels are still intentionally simple. The CUDA kernels expose low-level thread/block and memory-control mechanics. Triton expresses the same blocked matmul idea with less launch and indexing boilerplate. PyTorch remains the production-grade baseline.
 
 ## Repository Layout
 
@@ -61,6 +63,12 @@ Use Python 3.10 or newer. Dependencies are managed with `uv`:
 
 ```bash
 uv sync --extra dev
+```
+
+For Triton validation on a Linux CUDA machine, include the optional Triton extra:
+
+```bash
+uv sync --extra dev --extra triton
 ```
 
 PyTorch is a project dependency. On a CUDA Linux machine, verify that the resolved PyTorch build matches the target CUDA runtime before trusting GPU benchmark results.
@@ -107,11 +115,23 @@ uv run forgenpu-bench-matmul \
   --format table
 ```
 
-Run the M2 GPU comparison on a CUDA machine:
+Run the M3 GPU comparison on a CUDA machine:
 
 ```bash
 uv run forgenpu-bench-matmul \
   --implementation all \
+  --device cuda \
+  --shape 1024 1024 1024 \
+  --warmup 25 \
+  --iterations 100 \
+  --format table
+```
+
+Run only the Triton path:
+
+```bash
+uv run forgenpu-bench-matmul \
+  --implementation triton \
   --device cuda \
   --shape 1024 1024 1024 \
   --warmup 25 \
@@ -159,7 +179,7 @@ Run the PyTorch matmul benchmark:
 uv run forgenpu-bench-matmul --shape 512 512 512 --warmup 5 --iterations 20
 ```
 
-Run PyTorch, naive CUDA, and tiled CUDA matmul on a CUDA machine:
+Run PyTorch, naive CUDA, tiled CUDA, and Triton matmul on a CUDA machine when all are available:
 
 ```bash
 uv run forgenpu-bench-matmul \
@@ -207,6 +227,8 @@ make profile-matmul-nsys
 make build-cpp
 ```
 
+`make profile-matmul` profiles the CUDA tiled path. It is still useful CUDA evidence during M3, but it is not a Triton profiler target.
+
 For a GPU-backed reproducibility run, see [docs/reproducibility.md](docs/reproducibility.md).
 
 ## Benchmark Method
@@ -220,16 +242,17 @@ The matmul benchmark uses:
 - p50, p95, and mean latency,
 - machine and software metadata in the JSON output.
 
-M2 supports:
+M3 supports:
 
 - `--implementation torch`
 - `--implementation cuda_naive`
 - `--implementation cuda_tiled`
+- `--implementation triton`
 - `--implementation all`
 - `--format json` for scripts and saved artifacts
 - `--format table` for interactive reading
 
-The CUDA implementations only support FP32 CUDA tensors. Benchmark records include estimated FLOPs, achieved TFLOP/s, compulsory IO bytes, and an estimated global-memory byte count for custom kernels.
+The custom CUDA and Triton implementations only support FP32 CUDA tensors. `--implementation all` includes custom CUDA extensions and Triton only when those paths appear runnable in the current environment. Benchmark records include estimated FLOPs, achieved TFLOP/s, compulsory IO bytes, and an estimated global-memory byte count for custom kernels.
 
 ## Documentation Format
 
@@ -237,14 +260,15 @@ This nested repository is public code documentation, so Markdown files intention
 
 ## Roadmap
 
-- M3: Triton matmul and CUDA-vs-Triton ergonomics note.
 - M4: Tensor Core matmul path with dtype and layout notes.
 - M5-M10: normalization, softmax, RoPE, KV cache, attention, FlashAttention-style attention, and decoder-block integration.
 
 ## Known Limits
 
 - The custom CUDA matmul implementations are FP32-only.
+- The Triton matmul implementation is FP32-only.
 - The CUDA matmul implementations require a CUDA-capable PyTorch environment and nvcc.
+- The Triton matmul implementation requires a CUDA-capable PyTorch environment and the optional Triton dependency.
 - CUDA benchmark runs compile `.cu` files at runtime through PyTorch extension loading. Source checkouts use `kernels/cuda`; packaged installs use CUDA source files included as package data.
 - The tiled kernel uses shared-memory tiling, but no register blocking, Tensor Cores, vectorized loads, or layout transforms.
 - CPU benchmark output is useful for harness validation, not GPU-kernel conclusions.

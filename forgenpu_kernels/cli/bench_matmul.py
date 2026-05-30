@@ -35,6 +35,7 @@ class Implementation(str, Enum):
     torch = "torch"
     cuda_naive = "cuda_naive"
     cuda_tiled = "cuda_tiled"
+    triton = "triton"
     all = "all"
 
 

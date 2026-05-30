@@ -16,15 +16,20 @@ from forgenpu_kernels.bindings import (
     has_cuda_matmul_tiled,
 )
 from forgenpu_kernels.ops import max_error, torch_matmul
+from forgenpu_kernels.triton import (
+    has_triton_matmul,
+    triton_matmul,
+    triton_matmul_unavailable_reason,
+)
 
-MatmulImplementation = Literal["torch", "cuda_naive", "cuda_tiled"]
-MatmulImplementationSelection = Literal["torch", "cuda_naive", "cuda_tiled", "all"]
+MatmulImplementation = Literal["torch", "cuda_naive", "cuda_tiled", "triton"]
+MatmulImplementationSelection = Literal["torch", "cuda_naive", "cuda_tiled", "triton", "all"]
 
-MATMUL_IMPLEMENTATIONS: tuple[MatmulImplementation, ...] = (
-    "torch",
+MATMUL_CUDA_IMPLEMENTATIONS: tuple[MatmulImplementation, ...] = (
     "cuda_naive",
     "cuda_tiled",
 )
+MATMUL_TRITON_IMPLEMENTATIONS: tuple[MatmulImplementation, ...] = ("triton",)
 TILE_SIZE = 16
 
 
@@ -144,7 +149,7 @@ def matmul_workload_metrics(
 
     if implementation == "cuda_naive":
         estimated_global_memory_bytes = element_bytes * ((2 * m * n * k) + (m * n))
-    elif implementation == "cuda_tiled":
+    elif implementation in {"cuda_tiled", "triton"}:
         estimated_global_memory_bytes = element_bytes * (
             ((tile_n * m * k) + (tile_m * k * n)) + (m * n)
         )
@@ -179,9 +184,22 @@ def ceil_div(value: int, divisor: int) -> int:
 
 def selected_implementations(
     selection: MatmulImplementationSelection,
+    *,
+    device: str | None = None,
 ) -> tuple[MatmulImplementation, ...]:
     if selection == "all":
-        return MATMUL_IMPLEMENTATIONS
+        implementations: list[MatmulImplementation] = ["torch"]
+        if device is not None and not device.startswith("cuda"):
+            return tuple(implementations)
+        for implementation in MATMUL_CUDA_IMPLEMENTATIONS:
+            if implementation == "cuda_naive" and has_cuda_matmul_naive():
+                implementations.append(implementation)
+            if implementation == "cuda_tiled" and has_cuda_matmul_tiled():
+                implementations.append(implementation)
+        for implementation in MATMUL_TRITON_IMPLEMENTATIONS:
+            if implementation == "triton" and has_triton_matmul():
+                implementations.append(implementation)
+        return tuple(implementations)
     return (selection,)
 
 
@@ -202,6 +220,9 @@ def validate_implementation(
     if implementation == "cuda_tiled" and not has_cuda_matmul_tiled():
         reason = cuda_matmul_tiled_unavailable_reason()
         raise RuntimeError(f"cuda_tiled is unavailable: {reason}")
+    if implementation == "triton" and not has_triton_matmul():
+        reason = triton_matmul_unavailable_reason()
+        raise RuntimeError(f"triton is unavailable: {reason}")
 
 
 def run_implementation(implementation: MatmulImplementation, a, b):
@@ -211,6 +232,8 @@ def run_implementation(implementation: MatmulImplementation, a, b):
         return cuda_matmul_naive(a, b)
     if implementation == "cuda_tiled":
         return cuda_matmul_tiled(a, b)
+    if implementation == "triton":
+        return triton_matmul(a, b)
     raise ValueError(f"unknown implementation: {implementation}")
 
 
@@ -324,7 +347,7 @@ def run_matmul_benchmark(
     expected = torch.matmul(a, b)
 
     results: list[MatmulBenchmarkResult] = []
-    for implementation in selected_implementations(config.implementation):
+    for implementation in selected_implementations(config.implementation, device=device):
         emit(
             progress,
             f"running {implementation} warmup={config.warmup} iterations={config.iterations}",

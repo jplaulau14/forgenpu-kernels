@@ -14,9 +14,42 @@ from forgenpu_kernels.matmul_benchmark import (
 )
 
 
-def test_selected_implementations_expands_all_in_stable_order() -> None:
-    assert selected_implementations("all") == ("torch", "cuda_naive", "cuda_tiled")
+def test_selected_implementations_expands_all_with_triton_when_available(monkeypatch) -> None:
+    monkeypatch.setattr(matmul_benchmark, "has_cuda_matmul_naive", lambda: True)
+    monkeypatch.setattr(matmul_benchmark, "has_cuda_matmul_tiled", lambda: True)
+    monkeypatch.setattr(matmul_benchmark, "has_triton_matmul", lambda: True)
+
+    assert selected_implementations("all", device="cuda") == (
+        "torch",
+        "cuda_naive",
+        "cuda_tiled",
+        "triton",
+    )
     assert selected_implementations("cuda_tiled") == ("cuda_tiled",)
+
+
+def test_selected_implementations_skips_triton_when_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(matmul_benchmark, "has_cuda_matmul_naive", lambda: True)
+    monkeypatch.setattr(matmul_benchmark, "has_cuda_matmul_tiled", lambda: True)
+    monkeypatch.setattr(matmul_benchmark, "has_triton_matmul", lambda: False)
+
+    assert selected_implementations("all", device="cuda") == ("torch", "cuda_naive", "cuda_tiled")
+
+
+def test_selected_implementations_skips_unavailable_cuda_extensions(monkeypatch) -> None:
+    monkeypatch.setattr(matmul_benchmark, "has_cuda_matmul_naive", lambda: False)
+    monkeypatch.setattr(matmul_benchmark, "has_cuda_matmul_tiled", lambda: False)
+    monkeypatch.setattr(matmul_benchmark, "has_triton_matmul", lambda: True)
+
+    assert selected_implementations("all", device="cuda") == ("torch", "triton")
+
+
+def test_selected_implementations_cpu_all_is_torch_only(monkeypatch) -> None:
+    monkeypatch.setattr(matmul_benchmark, "has_cuda_matmul_naive", lambda: True)
+    monkeypatch.setattr(matmul_benchmark, "has_cuda_matmul_tiled", lambda: True)
+    monkeypatch.setattr(matmul_benchmark, "has_triton_matmul", lambda: True)
+
+    assert selected_implementations("all", device="cpu") == ("torch",)
 
 
 def test_matmul_workload_metrics_estimates_naive_and_tiled_global_bytes() -> None:
@@ -24,10 +57,12 @@ def test_matmul_workload_metrics_estimates_naive_and_tiled_global_bytes() -> Non
 
     naive = matmul_workload_metrics(implementation="cuda_naive", shape=shape, p50_ms=1.0)
     tiled = matmul_workload_metrics(implementation="cuda_tiled", shape=shape, p50_ms=1.0)
+    triton = matmul_workload_metrics(implementation="triton", shape=shape, p50_ms=1.0)
     torch = matmul_workload_metrics(implementation="torch", shape=shape, p50_ms=1.0)
 
     assert naive["estimated_global_memory_bytes"] == 8_594_128_896
     assert tiled["estimated_global_memory_bytes"] == 541_065_216
+    assert triton["estimated_global_memory_bytes"] == tiled["estimated_global_memory_bytes"]
     assert torch["estimated_global_memory_bytes"] is None
     assert tiled["estimated_global_memory_bytes"] < naive["estimated_global_memory_bytes"]
 

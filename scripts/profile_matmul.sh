@@ -24,7 +24,7 @@ PROFILE_TOOL="${PROFILE_TOOL:-auto}"
 mkdir -p "${OUT_DIR}"
 
 shape_label="${M}x${N}x${K}"
-benchmark_output="${OUT_DIR}/matmul_m2_${shape_label}_benchmark.json"
+benchmark_output="${OUT_DIR}/matmul_${shape_label}_benchmark.json"
 target_smoke_log="${OUT_DIR}/matmul_tiled_${shape_label}_target_smoke.log"
 ncu_report_base="${OUT_DIR}/matmul_tiled_${shape_label}_ncu"
 ncu_report="${ncu_report_base}.ncu-rep"
@@ -34,8 +34,6 @@ nsys_report="${nsys_report_base}.nsys-rep"
 nsys_raw_stream="${nsys_report_base}.qdstrm"
 nsys_log="${OUT_DIR}/matmul_tiled_${shape_label}_nsys.log"
 torch_profile_log="${OUT_DIR}/matmul_tiled_${shape_label}_torch_profile_run.log"
-
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-9.0}"
 
 log() {
   printf '[profile-matmul] %s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*" >&2
@@ -124,7 +122,7 @@ print_tool_version() {
 check_environment() {
   log "Checking profiler environment"
   log "shape=${shape_label} out_dir=${OUT_DIR}"
-  log "TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}"
+  log "TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST:-<unset; PyTorch extension build detects visible GPU arch>}"
   log "PROFILE_TOOL=${PROFILE_TOOL} REQUIRE_NCU=${REQUIRE_NCU} NCU_TIMEOUT_SECONDS=${NCU_TIMEOUT_SECONDS}"
 
   print_tool_version nvidia-smi nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
