@@ -1,4 +1,4 @@
-.PHONY: help quickstart env test lint bench-matmul bench-matmul-table bench-matmul-gpu install-nsight-systems profile-check profile-matmul profile-matmul-ncu profile-matmul-nsys configure-cpp build-cpp clean
+.PHONY: help quickstart env test lint bench-matmul bench-matmul-table bench-matmul-gpu install-nsight-systems profile-check profile-matmul profile-matmul-ncu profile-matmul-ncu-win profile-matmul-nsys configure-cpp build-cpp clean
 
 help:
 	@echo "ForgeNPU quick commands"
@@ -13,6 +13,7 @@ help:
 	@echo "  make profile-check     - print CUDA/Nsight profiler environment facts"
 	@echo "  make profile-matmul    - run M2 profiler workflow on a GPU machine"
 	@echo "  make profile-matmul-ncu - require Nsight Compute report generation"
+	@echo "  make profile-matmul-ncu-win - run Nsight Compute profiling from Windows PowerShell"
 	@echo "  make profile-matmul-nsys - require Nsight Systems report generation"
 
 quickstart: env lint test bench-matmul-table
@@ -46,6 +47,9 @@ profile-matmul:
 
 profile-matmul-ncu:
 	REQUIRE_NCU=1 scripts/profile_matmul.sh 1024 1024 1024
+
+profile-matmul-ncu-win:
+	powershell -ExecutionPolicy Bypass -File scripts/profile_matmul_ncu.ps1
 
 profile-matmul-nsys:
 	PROFILE_TOOL=nsys scripts/profile_matmul.sh 1024 1024 1024
