@@ -127,10 +127,23 @@ The repo keeps both because they answer different questions:
 - shape boundary handling,
 - correctness against PyTorch,
 - benchmark comparability,
-- the impact of shared-memory tiling.
+- the impact of shared-memory tiling,
 - CUDA-vs-Triton implementation ergonomics.
 
 Do not describe either custom CUDA implementation as production optimized.
+
+## M3 H100 Benchmark Result
+
+The first committed M3 benchmark summary is `results/profiles/m3-h100-triton.md`. For `1024 x 1024 x 1024` FP32 matmul on an `NVIDIA H100 80GB HBM3`, Triton measured:
+
+- p50 latency: `0.187 ms`
+- p95 latency: `0.192 ms`
+- achieved throughput: `11.487 TFLOP/s`
+- speedup over `cuda_naive`: `2.31x`
+- speedup over `cuda_tiled`: `1.49x`
+- speed relative to `torch.matmul`: `0.365x`
+
+This is benchmark evidence only. It shows that the M3 Triton path is faster than the simple custom CUDA baselines for this run, but still far below the PyTorch vendor-kernel baseline. It does not include profiler counters for stall reasons, memory throughput, occupancy, or Tensor Core usage.
 
 ## How To Run
 

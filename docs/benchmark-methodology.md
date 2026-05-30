@@ -128,9 +128,13 @@ uv run forgenpu-bench-matmul \
 
 Use `--quiet` when a script should suppress progress logs. JSON remains the default output format because it is the stable artifact format for saved benchmark results and profiler workflows.
 
-## 1660 Ti Validation Target
+## M3 H100 Benchmark Artifact
 
-The first M3 validation target is an NVIDIA GTX 1660 Ti accessed over SSH. Treat its numbers as accessible development evidence, not as H100/A100-class portfolio claims.
+The first M3 GPU benchmark artifact is:
+
+- `results/profiles/m3-h100-triton.md`
+
+It records a `1024 x 1024 x 1024` FP32 run on an `NVIDIA H100 80GB HBM3` with PyTorch, naive CUDA, tiled CUDA, and Triton included in the same benchmark result.
 
 Suggested command sequence:
 
@@ -145,7 +149,7 @@ uv run forgenpu-bench-matmul \
   --iterations 100 \
   --format json \
   --quiet \
-  --output results/matmul_1024_gtx1660ti_m3.json
+  --output results/matmul_1024_m3.json
 uv run forgenpu-bench-matmul \
   --implementation all \
   --device cuda \
@@ -157,16 +161,26 @@ uv run forgenpu-bench-matmul \
 
 When recording results, include the GPU name, CUDA version, PyTorch version, Triton version, warmup count, iteration count, shape, dtype, and which implementations were included. If `cuda_naive`, `cuda_tiled`, or `triton` are absent from `--implementation all`, run that implementation explicitly to capture the unavailable reason.
 
+## Benchmark And Profiling Evidence Boundaries
+
+Benchmarks and profiler captures answer different questions:
+
+- A benchmark says how long the implementation took for a specific shape, dtype, commit, software stack, and device.
+- A profiler capture explains why a specific kernel behaved that way on the profiled device.
+- Do not use profiler counters from one GPU to make definitive bottleneck claims about benchmark timings from another GPU.
+- When doing profiling work, first run the benchmark on the same device, shape, dtype, and commit so the profiler evidence has a timing baseline.
+- Label every artifact by device, shape, commit, implementation, and tool.
+
 CUDA tiled profiler run:
 
 ```bash
 scripts/profile_matmul.sh 1024 1024 1024
 ```
 
-On the GTX 1660 Ti, use the SM75 architecture explicitly if you profile the CUDA extension path:
+If the profiler machine requires an explicit CUDA architecture, set `TORCH_CUDA_ARCH_LIST` for that GPU before running the script:
 
 ```bash
-TORCH_CUDA_ARCH_LIST=7.5 scripts/profile_matmul.sh 1024 1024 1024
+TORCH_CUDA_ARCH_LIST=<compute-capability> scripts/profile_matmul.sh 1024 1024 1024
 ```
 
 The profiler script currently profiles `cuda_tiled`, not the M3 Triton kernel. Use it as CUDA tiled evidence and use the benchmark commands above for Triton-vs-CUDA timing until a Triton-specific profiler target exists.

@@ -81,6 +81,14 @@ Raw `.ncu-rep`, `.nsys-rep`, and generated benchmark JSON files are ignored by g
 
 The script keeps the default profiler pass intentionally light. Full roofline counter collection can be run manually with Nsight Compute after the basic profiler path is stable. In containers where `ncu` hangs or cannot collect counters, the PyTorch profiler fallback still records a CUDA timeline trace.
 
+## Benchmark Requirement For Profiling
+
+Every profiler artifact should be paired with a benchmark run on the same device, shape, dtype, commit, and implementation. The benchmark gives the timing story; the profiler explains the kernel behavior behind that timing.
+
+Do not use hardware-counter evidence from one GPU to make definitive claims about timings collected on another GPU. Cross-device comparisons are useful for learning, but they should be labeled as hypotheses unless benchmark and profiler evidence were collected on the same hardware.
+
+During M3, `scripts/profile_matmul.sh` still profiles `cuda_tiled`, not the Triton kernel. Triton performance claims should therefore cite benchmark artifacts such as `results/profiles/m3-h100-triton.md` until a Triton-specific profiler target exists.
+
 ## M2 Expected Bottleneck
 
 The M1 naive matmul rereads `A` and `B` values from global memory for every output element. The M2 tiled implementation should reduce global-memory traffic by staging `16 x 16` tiles in shared memory.

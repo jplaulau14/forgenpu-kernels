@@ -150,7 +150,7 @@ uv run forgenpu-bench-matmul \
   --iterations 100 \
   --format json \
   --quiet \
-  --output results/matmul_1024_runpod.json
+  --output results/matmul_1024_m3.json
 ```
 
 The historical script path still works:
@@ -230,6 +230,8 @@ make build-cpp
 `make profile-matmul` profiles the CUDA tiled path. It is still useful CUDA evidence during M3, but it is not a Triton profiler target.
 
 For a GPU-backed reproducibility run, see [docs/reproducibility.md](docs/reproducibility.md).
+
+The first committed M3 H100 benchmark summary is [results/profiles/m3-h100-triton.md](results/profiles/m3-h100-triton.md). It is timing evidence, not profiler-counter evidence. When doing profiling work, pair the profiler capture with a benchmark run from the same device, shape, dtype, commit, and implementation.
 
 ## Benchmark Method
 
