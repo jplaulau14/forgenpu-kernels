@@ -8,6 +8,8 @@ from typing import Any, Callable, Literal, TypedDict
 
 from forgenpu_kernels.benchmarks import benchmark_torch_callable, machine_info_dict
 from forgenpu_kernels.bindings import (
+    cuda_matmul_naive_unavailable_reason,
+    cuda_matmul_tiled_unavailable_reason,
     cuda_matmul_naive,
     cuda_matmul_tiled,
     has_cuda_matmul_naive,
@@ -169,9 +171,11 @@ def validate_implementation(*, implementation: MatmulImplementation, dtype_name:
         raise RuntimeError(f"{implementation} requires --device cuda or CUDA-capable --device auto")
 
     if implementation == "cuda_naive" and not has_cuda_matmul_naive():
-        raise RuntimeError("cuda_naive requires CUDA, PyTorch CUDA, and nvcc")
+        reason = cuda_matmul_naive_unavailable_reason()
+        raise RuntimeError(f"cuda_naive is unavailable: {reason}")
     if implementation == "cuda_tiled" and not has_cuda_matmul_tiled():
-        raise RuntimeError("cuda_tiled requires CUDA, PyTorch CUDA, and nvcc")
+        reason = cuda_matmul_tiled_unavailable_reason()
+        raise RuntimeError(f"cuda_tiled is unavailable: {reason}")
 
 
 def run_implementation(implementation: MatmulImplementation, a, b):

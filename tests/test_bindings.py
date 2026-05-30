@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from forgenpu_kernels.bindings import (
+    cuda_matmul_naive_unavailable_reason,
+    cuda_matmul_tiled_unavailable_reason,
     cuda_matmul_naive,
     cuda_matmul_tiled,
     has_cuda_matmul_naive,
@@ -19,7 +21,10 @@ def test_cuda_matmul_naive_explains_missing_cuda_environment() -> None:
     if has_cuda_matmul_naive():
         pytest.skip("CUDA matmul is available in this environment")
 
-    with pytest.raises(RuntimeError, match="CUDA"):
+    reason = cuda_matmul_naive_unavailable_reason()
+    assert reason
+
+    with pytest.raises(RuntimeError, match="requires"):
         cuda_matmul_naive(None, None)
 
 
@@ -27,5 +32,8 @@ def test_cuda_matmul_tiled_explains_missing_cuda_environment() -> None:
     if has_cuda_matmul_tiled():
         pytest.skip("CUDA matmul is available in this environment")
 
-    with pytest.raises(RuntimeError, match="CUDA"):
+    reason = cuda_matmul_tiled_unavailable_reason()
+    assert reason
+
+    with pytest.raises(RuntimeError, match="requires"):
         cuda_matmul_tiled(None, None)

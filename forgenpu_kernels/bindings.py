@@ -83,21 +83,34 @@ def _matmul_tiled_source() -> Path:
 
 
 def _has_cuda_extension(spec: CudaExtensionSpec) -> bool:
+    return cuda_extension_unavailable_reason(spec) is None
+
+
+def cuda_extension_unavailable_reason(spec: CudaExtensionSpec) -> str | None:
     try:
         torch = _require_torch()
         from torch.utils.cpp_extension import CUDA_HOME
-    except RuntimeError:
-        return False
-    except ImportError:
-        return False
+    except RuntimeError as exc:
+        return str(exc)
+    except ImportError as exc:
+        return f"{spec.label} requires PyTorch CUDA extension support: {exc}"
 
-    return bool(
-        torch.cuda.is_available()
-        and CUDA_HOME
-        and _kernel_source(spec).exists()
-        and _ninja_available()
-        and _host_compiler_available()
-    )
+    if not torch.cuda.is_available():
+        return f"{spec.label} requires a CUDA-capable PyTorch environment."
+    if CUDA_HOME is None:
+        return f"{spec.label} requires a CUDA toolkit with nvcc available."
+    source = _kernel_source(spec)
+    if not source.exists():
+        return _missing_source_message(spec.label, source)
+    if not _ninja_available():
+        return _missing_ninja_message(spec.label)
+    if not _host_compiler_available():
+        return (
+            f"{spec.label} requires the MSVC C++ compiler `cl` on Windows. "
+            "Install Visual Studio Build Tools with the C++ workload, then run from a "
+            "Developer PowerShell or Developer Command Prompt."
+        )
+    return None
 
 
 def has_cuda_matmul_naive() -> bool:
@@ -108,6 +121,16 @@ def has_cuda_matmul_naive() -> bool:
 def has_cuda_matmul_tiled() -> bool:
     """Return whether the current environment can build and run the M2 CUDA matmul."""
     return _has_cuda_extension(MATMUL_TILED)
+
+
+def cuda_matmul_naive_unavailable_reason() -> str | None:
+    """Return why the M1 CUDA matmul is unavailable, or None when it is available."""
+    return cuda_extension_unavailable_reason(MATMUL_NAIVE)
+
+
+def cuda_matmul_tiled_unavailable_reason() -> str | None:
+    """Return why the M2 CUDA matmul is unavailable, or None when it is available."""
+    return cuda_extension_unavailable_reason(MATMUL_TILED)
 
 
 @lru_cache(maxsize=None)
