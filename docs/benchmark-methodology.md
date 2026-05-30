@@ -47,8 +47,8 @@ atol = 1e-4
 Matmul benchmark records include:
 
 - `estimated_flops`: `2 * M * N * K`
-- `compulsory_io_bytes`: lower-bound FP32 bytes for reading `A`, reading `B`, and writing `C`
-- `estimated_global_memory_bytes`: rough custom-kernel global-memory traffic estimate
+- `compulsory_io_bytes`: lower-bound dtype-aware bytes for reading `A`, reading `B`, and writing `C`
+- `estimated_global_memory_bytes`: rough dtype-aware custom-kernel global-memory traffic estimate
 - `arithmetic_intensity_flop_per_byte`: estimated FLOPs divided by compulsory bytes
 - `achieved_tflops`: estimated FLOPs divided by p50 runtime
 - `speedup_vs_baseline`: p50 speedup relative to `torch.matmul`

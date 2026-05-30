@@ -46,6 +46,26 @@ def test_max_error_handles_identical_zero_float16_tensors() -> None:
     assert errors.max_rel_error == 0.0
 
 
+def test_max_error_casts_float16_before_subtracting() -> None:
+    actual = torch.tensor([65504.0], dtype=torch.float16)
+    expected = torch.tensor([-65504.0], dtype=torch.float16)
+
+    errors = max_error(actual, expected)
+
+    assert errors.max_abs_error == 131_008.0
+    assert errors.max_rel_error == 2.0
+
+
+def test_max_error_handles_matching_empty_tensors() -> None:
+    actual = torch.empty((0, 4), dtype=torch.float32)
+    expected = torch.empty((0, 4), dtype=torch.float32)
+
+    errors = max_error(actual, expected)
+
+    assert errors.max_abs_error == 0.0
+    assert errors.max_rel_error == 0.0
+
+
 @pytest.mark.skipif(not has_cuda_matmul_naive(), reason="CUDA extension toolchain is unavailable")
 @pytest.mark.parametrize(
     ("m", "n", "k"),
